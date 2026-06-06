@@ -1,0 +1,50 @@
+# Runtime
+telemetry = false
+logLevel = "warn"
+
+[console]
+depth = 4
+
+[run]
+bun = true
+shell = "bun"
+
+[install]
+exact = false
+frozenLockfile = false
+lockfile = true
+
+[test]
+root = "."
+pathIgnorePatterns = ["**/node_modules/**", "coverage/**"]
+# preload = ["./preload.ts"]
+timeout = 5000
+smol = false
+# Uncomment seed for debugging
+# seed = 2444615283
+randomize = true
+rerunEach = 3
+concurrentTestGlob = "**/*.concurrent.test.ts"
+coverage = true
+coverageSkipTestFiles = false
+coverageThreshold = { line = 0.95, function = 0.95, statement = 0.95 }
+coverageReporter = ["text", "lcov"]
+coverageDir = "coverage"
+coveragePathIgnorePatterns = [
+  # Configuration files
+  "*.config.js",
+  "*.config.mjs",
+  "*.config.ts",
+  # Build/generated output
+  "dist/**",
+  "coverage/**",
+  # Dependencies
+  "node_modules/**",
+  # Third-party upstream submodules
+  "third-party/**",
+  "ext/**",
+]
+
+[test.reporter]
+dots = true
+junit = "coverage/test-results.xml"
