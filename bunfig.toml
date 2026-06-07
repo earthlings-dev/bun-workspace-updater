@@ -22,13 +22,19 @@ timeout = 5000
 smol = false
 # Uncomment seed for debugging
 # seed = 2444615283
+# Tests are order-randomized and each runs 3x (rerunEach) to surface flakiness;
+# `*.concurrent.test.ts` files run concurrently. The `test` script adds `--parallel
+# --concurrent`, and the suite is written (via dependency injection) to pass under it.
 randomize = true
 rerunEach = 3
 concurrentTestGlob = "**/*.concurrent.test.ts"
 coverage = true
 coverageSkipTestFiles = false
+# Hard gate: a run below any of these thresholds fails. Keeping the suite in one file
+# keeps `--parallel` a single worker so coverage merges into one accurate number.
 coverageThreshold = { line = 0.95, function = 0.95, statement = 0.95 }
 coverageReporter = ["text", "lcov"]
+# Output dir is intentionally tracked in git (see README / AGENTS.md); not ignored.
 coverageDir = "coverage"
 coveragePathIgnorePatterns = [
   # Configuration files

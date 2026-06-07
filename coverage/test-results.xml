@@ -1,0 +1,382 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="bun test" tests="207" assertions="0" failures="0" skipped="0" time="0.860042103">
+  <testsuite name="tests/update-latest.test.ts" file="tests/update-latest.test.ts" tests="207" assertions="0" failures="0" skipped="0" time="0" hostname="ubuntu">
+    <testsuite name="readPackageName" file="tests/update-latest.test.ts" line="385" tests="1" assertions="0" failures="0" skipped="0" time="0.004" hostname="ubuntu">
+      <testcase name="reads string name or undefined" classname="readPackageName" time="0.004541" file="tests/update-latest.test.ts" line="386" assertions="0" />
+    </testsuite>
+    <testsuite name="unifyPrefix" file="tests/update-latest.test.ts" line="563" tests="1" assertions="0" failures="0" skipped="0" time="0" hostname="ubuntu">
+      <testcase name="most-permissive wins" classname="unifyPrefix" time="0.00005" file="tests/update-latest.test.ts" line="564" assertions="0" />
+    </testsuite>
+    <testsuite name="mapConcurrent" file="tests/update-latest.test.ts" line="573" tests="1" assertions="0" failures="0" skipped="0" time="0" hostname="ubuntu">
+      <testcase name="maps with a concurrency limit, preserving order" classname="mapConcurrent" time="0.000366" file="tests/update-latest.test.ts" line="574" assertions="0" />
+    </testsuite>
+    <testsuite name="findEntries" file="tests/update-latest.test.ts" line="249" tests="5" assertions="0" failures="0" skipped="0" time="0.002" hostname="ubuntu">
+      <testcase name="sentinels collected only with resolveSentinels" classname="findEntries" time="0.001239" file="tests/update-latest.test.ts" line="329" assertions="0" />
+      <testcase name="collects catalog, named catalogs (nested + top-level) and dep fields" classname="findEntries" time="0.001158" file="tests/update-latest.test.ts" line="286" assertions="0" />
+      <testcase name="non-string/identifier/numeric keys do not throw and are ignored" classname="findEntries" time="0.000834" file="tests/update-latest.test.ts" line="318" assertions="0" />
+      <testcase name="empty / non-object / array roots yield no entries" classname="findEntries" time="0.000252" file="tests/update-latest.test.ts" line="323" assertions="0" />
+      <testcase name="value-span offsets land on the quoted version literal" classname="findEntries" time="0.000558" file="tests/update-latest.test.ts" line="309" assertions="0" />
+    </testsuite>
+    <testsuite name="fetchLatest" file="tests/update-latest.test.ts" line="585" tests="3" assertions="0" failures="0" skipped="0" time="0.013" hostname="ubuntu">
+      <testcase name="404 throws with status" classname="fetchLatest" time="0.013917" file="tests/update-latest.test.ts" line="597" assertions="0" />
+      <testcase name="rejects bodies without a string version" classname="fetchLatest" time="0.000278" file="tests/update-latest.test.ts" line="602" assertions="0" />
+      <testcase name="200 returns version and encodes scoped names with %2F" classname="fetchLatest" time="0.000099" file="tests/update-latest.test.ts" line="586" assertions="0" />
+    </testsuite>
+    <testsuite name="run (--to-catalog)" file="tests/update-latest.test.ts" line="751" tests="6" assertions="0" failures="0" skipped="0" time="0.114" hostname="ubuntu">
+      <testcase name="runs a single install at the root after migrating when --install is set" classname="run (--to-catalog)" time="0.019313" file="tests/update-latest.test.ts" line="934" assertions="0" />
+      <testcase name="object-form with an existing catalog merges only missing entries" classname="run (--to-catalog)" time="0.019278" file="tests/update-latest.test.ts" line="869" assertions="0" />
+      <testcase name="object-form with an empty catalog populates it" classname="run (--to-catalog)" time="0.019274" file="tests/update-latest.test.ts" line="896" assertions="0" />
+      <testcase name="a fetch failure leaves that dependency untouched and uncatalogued" classname="run (--to-catalog)" time="0.019245" file="tests/update-latest.test.ts" line="821" assertions="0" />
+      <testcase name="object-form without a catalog inserts one" classname="run (--to-catalog)" time="0.019197" file="tests/update-latest.test.ts" line="845" assertions="0" />
+      <testcase name="is idempotent: an already-catalogued workspace is a no-op" classname="run (--to-catalog)" time="0.019277" file="tests/update-latest.test.ts" line="950" assertions="0" />
+    </testsuite>
+    <testsuite name="describeSource" file="tests/update-latest.test.ts" line="527" tests="1" assertions="0" failures="0" skipped="0" time="0" hostname="ubuntu">
+      <testcase name="labels each variant" classname="describeSource" time="0.000051" file="tests/update-latest.test.ts" line="528" assertions="0" />
+    </testsuite>
+    <testsuite name="detectIndentUnit / formatJsonArray / formatJsonObject" file="tests/update-latest.test.ts" line="535" tests="3" assertions="0" failures="0" skipped="0" time="0" hostname="ubuntu">
+      <testcase name="formatJsonObject" classname="detectIndentUnit / formatJsonArray / formatJsonObject" time="0.000028" file="tests/update-latest.test.ts" line="548" assertions="0" />
+      <testcase name="formatJsonArray" classname="detectIndentUnit / formatJsonArray / formatJsonObject" time="0.000016" file="tests/update-latest.test.ts" line="543" assertions="0" />
+      <testcase name="detectIndentUnit" classname="detectIndentUnit / formatJsonArray / formatJsonObject" time="0.000025" file="tests/update-latest.test.ts" line="536" assertions="0" />
+    </testsuite>
+    <testsuite name="propKey" file="tests/update-latest.test.ts" line="336" tests="1" assertions="0" failures="0" skipped="0" time="0" hostname="ubuntu">
+      <testcase name="reads the key of a string-named property" classname="propKey" time="0.000169" file="tests/update-latest.test.ts" line="337" assertions="0" />
+    </testsuite>
+    <testsuite name="run (--to-catalog)" file="tests/update-latest.test.ts" line="751" tests="3" assertions="0" failures="0" skipped="0" time="0.057" hostname="ubuntu">
+      <testcase name="does not duplicate a catalog entry that already exists" classname="run (--to-catalog)" time="0.019601" file="tests/update-latest.test.ts" line="911" assertions="0" />
+      <testcase name="array-form: rewrites workspaces to a sorted catalog, unifies conflicts, rewrites members" classname="run (--to-catalog)" time="0.019792" file="tests/update-latest.test.ts" line="776" assertions="0" />
+      <testcase name="--dry-run writes nothing" classname="run (--to-catalog)" time="0.019659" file="tests/update-latest.test.ts" line="812" assertions="0" />
+    </testsuite>
+    <testsuite name="isBumpableRange" file="tests/update-latest.test.ts" line="183" tests="3" assertions="0" failures="0" skipped="0" time="0" hostname="ubuntu">
+      <testcase name="plain semver (incl. partial-x) is bumpable" classname="isBumpableRange" time="0.000047" file="tests/update-latest.test.ts" line="213" assertions="0" />
+      <testcase name="sentinels are skipped by default, bumpable with --resolve-sentinels" classname="isBumpableRange" time="0.000035" file="tests/update-latest.test.ts" line="206" assertions="0" />
+      <testcase name="protocol specifiers are never bumpable" classname="isBumpableRange" time="0.000029" file="tests/update-latest.test.ts" line="184" assertions="0" />
+    </testsuite>
+    <testsuite name="readWorkspacePatterns" file="tests/update-latest.test.ts" line="354" tests="6" assertions="0" failures="0" skipped="0" time="0" hostname="ubuntu">
+      <testcase name="array form" classname="readWorkspacePatterns" time="0.000134" file="tests/update-latest.test.ts" line="355" assertions="0" />
+      <testcase name="object form without `packages` -&gt; []" classname="readWorkspacePatterns" time="0.000122" file="tests/update-latest.test.ts" line="366" assertions="0" />
+      <testcase name="negation + multi-glob preserved verbatim" classname="readWorkspacePatterns" time="0.000059" file="tests/update-latest.test.ts" line="377" assertions="0" />
+      <testcase name="absent workspaces / non-object root -&gt; []" classname="readWorkspacePatterns" time="0.000085" file="tests/update-latest.test.ts" line="372" assertions="0" />
+      <testcase name="non-array/non-object workspaces -&gt; []" classname="readWorkspacePatterns" time="0.000051" file="tests/update-latest.test.ts" line="369" assertions="0" />
+      <testcase name="object form reads `packages`" classname="readWorkspacePatterns" time="0.000051" file="tests/update-latest.test.ts" line="361" assertions="0" />
+    </testsuite>
+    <testsuite name="discoverMemberFiles" file="tests/update-latest.test.ts" line="398" tests="1" assertions="0" failures="0" skipped="0" time="0.02" hostname="ubuntu">
+      <testcase name="drops the root package.json itself" classname="discoverMemberFiles" time="0.020798" file="tests/update-latest.test.ts" line="445" assertions="0" />
+    </testsuite>
+    <testsuite name="run (--to-catalog)" file="tests/update-latest.test.ts" line="751" tests="1" assertions="0" failures="0" skipped="0" time="0.02" hostname="ubuntu">
+      <testcase name="errors when the target is not a workspace" classname="run (--to-catalog)" time="0.020687" file="tests/update-latest.test.ts" line="972" assertions="0" />
+    </testsuite>
+    <testsuite name="discoverMemberFiles" file="tests/update-latest.test.ts" line="398" tests="5" assertions="0" failures="0" skipped="0" time="0.103" hostname="ubuntu">
+      <testcase name="no matches -&gt; []" classname="discoverMemberFiles" time="0.020925" file="tests/update-latest.test.ts" line="453" assertions="0" />
+      <testcase name="expands `*` globs, skipping dirs without a package.json" classname="discoverMemberFiles" time="0.020995" file="tests/update-latest.test.ts" line="410" assertions="0" />
+      <testcase name="honors `!` negation" classname="discoverMemberFiles" time="0.021389" file="tests/update-latest.test.ts" line="428" assertions="0" />
+      <testcase name="dedupes overlapping globs and returns absolute paths" classname="discoverMemberFiles" time="0.02112" file="tests/update-latest.test.ts" line="437" assertions="0" />
+      <testcase name="handles literal member paths" classname="discoverMemberFiles" time="0.021034" file="tests/update-latest.test.ts" line="421" assertions="0" />
+    </testsuite>
+    <testsuite name="parseArgs" file="tests/update-latest.test.ts" line="136" tests="5" assertions="0" failures="0" skipped="0" time="0" hostname="ubuntu">
+      <testcase name="unknown flag throws" classname="parseArgs" time="0.000163" file="tests/update-latest.test.ts" line="174" assertions="0" />
+      <testcase name="boolean + value flags" classname="parseArgs" time="0.000114" file="tests/update-latest.test.ts" line="149" assertions="0" />
+      <testcase name="`-r` is a recursive flag, not a positional file" classname="parseArgs" time="0.000025" file="tests/update-latest.test.ts" line="167" assertions="0" />
+      <testcase name="defaults" classname="parseArgs" time="0.000033" file="tests/update-latest.test.ts" line="137" assertions="0" />
+      <testcase name="positional file is absolute-resolved" classname="parseArgs" time="0.000023" file="tests/update-latest.test.ts" line="162" assertions="0" />
+    </testsuite>
+    <testsuite name="splitPrefix / bumpRange" file="tests/update-latest.test.ts" line="224" tests="2" assertions="0" failures="0" skipped="0" time="0" hostname="ubuntu">
+      <testcase name="bumpRange preserves prefix; equal range is a no-op" classname="splitPrefix / bumpRange" time="0.000045" file="tests/update-latest.test.ts" line="238" assertions="0" />
+      <testcase name="splits every prefix form" classname="splitPrefix / bumpRange" time="0.000083" file="tests/update-latest.test.ts" line="225" assertions="0" />
+    </testsuite>
+    <testsuite name="applyEdits" file="tests/update-latest.test.ts" line="511" tests="2" assertions="0" failures="0" skipped="0" time="0" hostname="ubuntu">
+      <testcase name="no edits returns the original text" classname="applyEdits" time="0.000051" file="tests/update-latest.test.ts" line="522" assertions="0" />
+      <testcase name="applies edits in descending order, preserving surrounding text" classname="applyEdits" time="0.000052" file="tests/update-latest.test.ts" line="512" assertions="0" />
+    </testsuite>
+    <testsuite name="main" file="tests/update-latest.test.ts" line="989" tests="1" assertions="0" failures="0" skipped="0" time="0.006" hostname="ubuntu">
+      <testcase name="returns 1 when the target file is missing" classname="main" time="0.006794" file="tests/update-latest.test.ts" line="1003" assertions="0" />
+    </testsuite>
+    <testsuite name="terminal output (captured via the injected Console)" file="tests/update-latest.test.ts" line="1032" tests="1" assertions="0" failures="0" skipped="0" time="0.006" hostname="ubuntu">
+      <testcase name="main: a missing file prints &quot;Not found:&quot; to stderr and returns 1" classname="terminal output (captured via the injected Console)" time="0.006867" file="tests/update-latest.test.ts" line="1133" assertions="0" />
+    </testsuite>
+    <testsuite name="run (update)" file="tests/update-latest.test.ts" line="623" tests="2" assertions="0" failures="0" skipped="0" time="0.016" hostname="ubuntu">
+      <testcase name="reports nothing to do when no bumpable entries exist" classname="run (update)" time="0.008592" file="tests/update-latest.test.ts" line="727" assertions="0" />
+      <testcase name="--only filters which packages are fetched and bumped" classname="run (update)" time="0.008472" file="tests/update-latest.test.ts" line="712" assertions="0" />
+    </testsuite>
+    <testsuite name="buildWorkFiles / collectMemberNames" file="tests/update-latest.test.ts" line="464" tests="1" assertions="0" failures="0" skipped="0" time="0.008" hostname="ubuntu">
+      <testcase name="no workspaces -&gt; root only" classname="buildWorkFiles / collectMemberNames" time="0.008379" file="tests/update-latest.test.ts" line="497" assertions="0" />
+    </testsuite>
+    <testsuite name="main" file="tests/update-latest.test.ts" line="989" tests="2" assertions="0" failures="0" skipped="0" time="0.014" hostname="ubuntu">
+      <testcase name="propagates a non-zero install exit code" classname="main" time="0.007999" file="tests/update-latest.test.ts" line="1011" assertions="0" />
+      <testcase name="parses argv, runs (dry-run) and returns 0" classname="main" time="0.007871" file="tests/update-latest.test.ts" line="990" assertions="0" />
+    </testsuite>
+    <testsuite name="terminal output (captured via the injected Console)" file="tests/update-latest.test.ts" line="1032" tests="4" assertions="0" failures="0" skipped="0" time="0.027" hostname="ubuntu">
+      <testcase name="runUpdate: a fetch failure prints ✗ to stderr; others still ↑ to stdout" classname="terminal output (captured via the injected Console)" time="0.007182" file="tests/update-latest.test.ts" line="1065" assertions="0" />
+      <testcase name="runUpdate: a real write run prints &quot;Running bun install…&quot; to stdout and spawns install" classname="terminal output (captured via the injected Console)" time="0.007123" file="tests/update-latest.test.ts" line="1081" assertions="0" />
+      <testcase name="runUpdate: header, per-bump ↑ line, and summary go to stdout; stderr stays empty" classname="terminal output (captured via the injected Console)" time="0.006981" file="tests/update-latest.test.ts" line="1033" assertions="0" />
+      <testcase name="runUpdate: empty plan prints &quot;No bumpable entries&quot; and fetches nothing" classname="terminal output (captured via the injected Console)" time="0.007388" file="tests/update-latest.test.ts" line="1050" assertions="0" />
+    </testsuite>
+    <testsuite name="buildWorkFiles / collectMemberNames" file="tests/update-latest.test.ts" line="464" tests="1" assertions="0" failures="0" skipped="0" time="0.008" hostname="ubuntu">
+      <testcase name="non-recursive -&gt; root only" classname="buildWorkFiles / collectMemberNames" time="0.008886" file="tests/update-latest.test.ts" line="473" assertions="0" />
+    </testsuite>
+    <testsuite name="terminal output (captured via the injected Console)" file="tests/update-latest.test.ts" line="1032" tests="1" assertions="0" failures="0" skipped="0" time="0.009" hostname="ubuntu">
+      <testcase name="runToCatalog: an already-catalog tree prints &quot;Nothing to convert&quot;" classname="terminal output (captured via the injected Console)" time="0.00925" file="tests/update-latest.test.ts" line="1116" assertions="0" />
+    </testsuite>
+    <testsuite name="run (update)" file="tests/update-latest.test.ts" line="623" tests="4" assertions="0" failures="0" skipped="0" time="0.04" hostname="ubuntu">
+      <testcase name="a non-zero install exit is surfaced as installExitCode" classname="run (update)" time="0.010924" file="tests/update-latest.test.ts" line="704" assertions="0" />
+      <testcase name="recursively bumps members, dedupes fetches, skips internal/protocol/sentinel" classname="run (update)" time="0.010821" file="tests/update-latest.test.ts" line="654" assertions="0" />
+      <testcase name="runs a single install at the root when changes are written" classname="run (update)" time="0.010784" file="tests/update-latest.test.ts" line="693" assertions="0" />
+      <testcase name="--dry-run writes nothing and never spawns install" classname="run (update)" time="0.010711" file="tests/update-latest.test.ts" line="682" assertions="0" />
+    </testsuite>
+    <testsuite name="buildWorkFiles / collectMemberNames" file="tests/update-latest.test.ts" line="464" tests="1" assertions="0" failures="0" skipped="0" time="0.01" hostname="ubuntu">
+      <testcase name="recursive array-form -&gt; root + members, each with its own entries" classname="buildWorkFiles / collectMemberNames" time="0.010622" file="tests/update-latest.test.ts" line="481" assertions="0" />
+    </testsuite>
+    <testsuite name="terminal output (captured via the injected Console)" file="tests/update-latest.test.ts" line="1032" tests="1" assertions="0" failures="0" skipped="0" time="0.012" hostname="ubuntu">
+      <testcase name="runToCatalog: prints &quot;+ catalog ·&quot; rows + summary to stdout, &quot;!&quot; conflicts to stderr" classname="terminal output (captured via the injected Console)" time="0.012161" file="tests/update-latest.test.ts" line="1096" assertions="0" />
+    </testsuite>
+    <testsuite name="readPackageName" file="tests/update-latest.test.ts" line="385" tests="1" assertions="0" failures="0" skipped="0" time="0" hostname="ubuntu">
+      <testcase name="reads string name or undefined" classname="readPackageName" time="0.000288" file="tests/update-latest.test.ts" line="386" assertions="0" />
+    </testsuite>
+    <testsuite name="unifyPrefix" file="tests/update-latest.test.ts" line="563" tests="1" assertions="0" failures="0" skipped="0" time="0" hostname="ubuntu">
+      <testcase name="most-permissive wins" classname="unifyPrefix" time="0.000015" file="tests/update-latest.test.ts" line="564" assertions="0" />
+    </testsuite>
+    <testsuite name="mapConcurrent" file="tests/update-latest.test.ts" line="573" tests="1" assertions="0" failures="0" skipped="0" time="0" hostname="ubuntu">
+      <testcase name="maps with a concurrency limit, preserving order" classname="mapConcurrent" time="0.000052" file="tests/update-latest.test.ts" line="574" assertions="0" />
+    </testsuite>
+    <testsuite name="findEntries" file="tests/update-latest.test.ts" line="249" tests="5" assertions="0" failures="0" skipped="0" time="0" hostname="ubuntu">
+      <testcase name="sentinels collected only with resolveSentinels" classname="findEntries" time="0.000141" file="tests/update-latest.test.ts" line="329" assertions="0" />
+      <testcase name="collects catalog, named catalogs (nested + top-level) and dep fields" classname="findEntries" time="0.00016" file="tests/update-latest.test.ts" line="286" assertions="0" />
+      <testcase name="non-string/identifier/numeric keys do not throw and are ignored" classname="findEntries" time="0.00016" file="tests/update-latest.test.ts" line="318" assertions="0" />
+      <testcase name="empty / non-object / array roots yield no entries" classname="findEntries" time="0.000065" file="tests/update-latest.test.ts" line="323" assertions="0" />
+      <testcase name="value-span offsets land on the quoted version literal" classname="findEntries" time="0.000116" file="tests/update-latest.test.ts" line="309" assertions="0" />
+    </testsuite>
+    <testsuite name="fetchLatest" file="tests/update-latest.test.ts" line="585" tests="3" assertions="0" failures="0" skipped="0" time="0.004" hostname="ubuntu">
+      <testcase name="404 throws with status" classname="fetchLatest" time="0.004455" file="tests/update-latest.test.ts" line="597" assertions="0" />
+      <testcase name="rejects bodies without a string version" classname="fetchLatest" time="0.000124" file="tests/update-latest.test.ts" line="602" assertions="0" />
+      <testcase name="200 returns version and encodes scoped names with %2F" classname="fetchLatest" time="0.000027" file="tests/update-latest.test.ts" line="586" assertions="0" />
+    </testsuite>
+    <testsuite name="run (--to-catalog)" file="tests/update-latest.test.ts" line="751" tests="6" assertions="0" failures="0" skipped="0" time="0.03" hostname="ubuntu">
+      <testcase name="runs a single install at the root after migrating when --install is set" classname="run (--to-catalog)" time="0.005471" file="tests/update-latest.test.ts" line="934" assertions="0" />
+      <testcase name="is idempotent: an already-catalogued workspace is a no-op" classname="run (--to-catalog)" time="0.005438" file="tests/update-latest.test.ts" line="950" assertions="0" />
+      <testcase name="object-form with an existing catalog merges only missing entries" classname="run (--to-catalog)" time="0.005478" file="tests/update-latest.test.ts" line="869" assertions="0" />
+      <testcase name="object-form with an empty catalog populates it" classname="run (--to-catalog)" time="0.005476" file="tests/update-latest.test.ts" line="896" assertions="0" />
+      <testcase name="does not duplicate a catalog entry that already exists" classname="run (--to-catalog)" time="0.005451" file="tests/update-latest.test.ts" line="911" assertions="0" />
+      <testcase name="a fetch failure leaves that dependency untouched and uncatalogued" classname="run (--to-catalog)" time="0.005497" file="tests/update-latest.test.ts" line="821" assertions="0" />
+    </testsuite>
+    <testsuite name="describeSource" file="tests/update-latest.test.ts" line="527" tests="1" assertions="0" failures="0" skipped="0" time="0" hostname="ubuntu">
+      <testcase name="labels each variant" classname="describeSource" time="0.000029" file="tests/update-latest.test.ts" line="528" assertions="0" />
+    </testsuite>
+    <testsuite name="detectIndentUnit / formatJsonArray / formatJsonObject" file="tests/update-latest.test.ts" line="535" tests="3" assertions="0" failures="0" skipped="0" time="0" hostname="ubuntu">
+      <testcase name="formatJsonObject" classname="detectIndentUnit / formatJsonArray / formatJsonObject" time="0.000011" file="tests/update-latest.test.ts" line="548" assertions="0" />
+      <testcase name="formatJsonArray" classname="detectIndentUnit / formatJsonArray / formatJsonObject" time="0.000007" file="tests/update-latest.test.ts" line="543" assertions="0" />
+      <testcase name="detectIndentUnit" classname="detectIndentUnit / formatJsonArray / formatJsonObject" time="0.000017" file="tests/update-latest.test.ts" line="536" assertions="0" />
+    </testsuite>
+    <testsuite name="propKey" file="tests/update-latest.test.ts" line="336" tests="1" assertions="0" failures="0" skipped="0" time="0" hostname="ubuntu">
+      <testcase name="reads the key of a string-named property" classname="propKey" time="0.000078" file="tests/update-latest.test.ts" line="337" assertions="0" />
+    </testsuite>
+    <testsuite name="run (--to-catalog)" file="tests/update-latest.test.ts" line="751" tests="3" assertions="0" failures="0" skipped="0" time="0.015" hostname="ubuntu">
+      <testcase name="object-form without a catalog inserts one" classname="run (--to-catalog)" time="0.005653" file="tests/update-latest.test.ts" line="845" assertions="0" />
+      <testcase name="array-form: rewrites workspaces to a sorted catalog, unifies conflicts, rewrites members" classname="run (--to-catalog)" time="0.005681" file="tests/update-latest.test.ts" line="776" assertions="0" />
+      <testcase name="--dry-run writes nothing" classname="run (--to-catalog)" time="0.005647" file="tests/update-latest.test.ts" line="812" assertions="0" />
+    </testsuite>
+    <testsuite name="isBumpableRange" file="tests/update-latest.test.ts" line="183" tests="3" assertions="0" failures="0" skipped="0" time="0" hostname="ubuntu">
+      <testcase name="plain semver (incl. partial-x) is bumpable" classname="isBumpableRange" time="0.000011" file="tests/update-latest.test.ts" line="213" assertions="0" />
+      <testcase name="sentinels are skipped by default, bumpable with --resolve-sentinels" classname="isBumpableRange" time="0.000009" file="tests/update-latest.test.ts" line="206" assertions="0" />
+      <testcase name="protocol specifiers are never bumpable" classname="isBumpableRange" time="0.000008" file="tests/update-latest.test.ts" line="184" assertions="0" />
+    </testsuite>
+    <testsuite name="readWorkspacePatterns" file="tests/update-latest.test.ts" line="354" tests="6" assertions="0" failures="0" skipped="0" time="0" hostname="ubuntu">
+      <testcase name="array form" classname="readWorkspacePatterns" time="0.000049" file="tests/update-latest.test.ts" line="355" assertions="0" />
+      <testcase name="object form without `packages` -&gt; []" classname="readWorkspacePatterns" time="0.000026" file="tests/update-latest.test.ts" line="366" assertions="0" />
+      <testcase name="negation + multi-glob preserved verbatim" classname="readWorkspacePatterns" time="0.000023" file="tests/update-latest.test.ts" line="377" assertions="0" />
+      <testcase name="absent workspaces / non-object root -&gt; []" classname="readWorkspacePatterns" time="0.000048" file="tests/update-latest.test.ts" line="372" assertions="0" />
+      <testcase name="non-array/non-object workspaces -&gt; []" classname="readWorkspacePatterns" time="0.000011" file="tests/update-latest.test.ts" line="369" assertions="0" />
+      <testcase name="object form reads `packages`" classname="readWorkspacePatterns" time="0.000023" file="tests/update-latest.test.ts" line="361" assertions="0" />
+    </testsuite>
+    <testsuite name="run (--to-catalog)" file="tests/update-latest.test.ts" line="751" tests="1" assertions="0" failures="0" skipped="0" time="0.005" hostname="ubuntu">
+      <testcase name="errors when the target is not a workspace" classname="run (--to-catalog)" time="0.005949" file="tests/update-latest.test.ts" line="972" assertions="0" />
+    </testsuite>
+    <testsuite name="discoverMemberFiles" file="tests/update-latest.test.ts" line="398" tests="6" assertions="0" failures="0" skipped="0" time="0.036" hostname="ubuntu">
+      <testcase name="expands `*` globs, skipping dirs without a package.json" classname="discoverMemberFiles" time="0.00603" file="tests/update-latest.test.ts" line="410" assertions="0" />
+      <testcase name="drops the root package.json itself" classname="discoverMemberFiles" time="0.006028" file="tests/update-latest.test.ts" line="445" assertions="0" />
+      <testcase name="handles literal member paths" classname="discoverMemberFiles" time="0.006717" file="tests/update-latest.test.ts" line="421" assertions="0" />
+      <testcase name="dedupes overlapping globs and returns absolute paths" classname="discoverMemberFiles" time="0.006762" file="tests/update-latest.test.ts" line="437" assertions="0" />
+      <testcase name="honors `!` negation" classname="discoverMemberFiles" time="0.006844" file="tests/update-latest.test.ts" line="428" assertions="0" />
+      <testcase name="no matches -&gt; []" classname="discoverMemberFiles" time="0.006763" file="tests/update-latest.test.ts" line="453" assertions="0" />
+    </testsuite>
+    <testsuite name="parseArgs" file="tests/update-latest.test.ts" line="136" tests="5" assertions="0" failures="0" skipped="0" time="0" hostname="ubuntu">
+      <testcase name="unknown flag throws" classname="parseArgs" time="0.000013" file="tests/update-latest.test.ts" line="174" assertions="0" />
+      <testcase name="boolean + value flags" classname="parseArgs" time="0.000043" file="tests/update-latest.test.ts" line="149" assertions="0" />
+      <testcase name="`-r` is a recursive flag, not a positional file" classname="parseArgs" time="0.000009" file="tests/update-latest.test.ts" line="167" assertions="0" />
+      <testcase name="defaults" classname="parseArgs" time="0.000012" file="tests/update-latest.test.ts" line="137" assertions="0" />
+      <testcase name="positional file is absolute-resolved" classname="parseArgs" time="0.000008" file="tests/update-latest.test.ts" line="162" assertions="0" />
+    </testsuite>
+    <testsuite name="splitPrefix / bumpRange" file="tests/update-latest.test.ts" line="224" tests="2" assertions="0" failures="0" skipped="0" time="0" hostname="ubuntu">
+      <testcase name="bumpRange preserves prefix; equal range is a no-op" classname="splitPrefix / bumpRange" time="0.000008" file="tests/update-latest.test.ts" line="238" assertions="0" />
+      <testcase name="splits every prefix form" classname="splitPrefix / bumpRange" time="0.000018" file="tests/update-latest.test.ts" line="225" assertions="0" />
+    </testsuite>
+    <testsuite name="applyEdits" file="tests/update-latest.test.ts" line="511" tests="2" assertions="0" failures="0" skipped="0" time="0" hostname="ubuntu">
+      <testcase name="no edits returns the original text" classname="applyEdits" time="0.000004" file="tests/update-latest.test.ts" line="522" assertions="0" />
+      <testcase name="applies edits in descending order, preserving surrounding text" classname="applyEdits" time="0.000011" file="tests/update-latest.test.ts" line="512" assertions="0" />
+    </testsuite>
+    <testsuite name="main" file="tests/update-latest.test.ts" line="989" tests="1" assertions="0" failures="0" skipped="0" time="0.002" hostname="ubuntu">
+      <testcase name="returns 1 when the target file is missing" classname="main" time="0.002195" file="tests/update-latest.test.ts" line="1003" assertions="0" />
+    </testsuite>
+    <testsuite name="run (update)" file="tests/update-latest.test.ts" line="623" tests="2" assertions="0" failures="0" skipped="0" time="0.006" hostname="ubuntu">
+      <testcase name="reports nothing to do when no bumpable entries exist" classname="run (update)" time="0.003151" file="tests/update-latest.test.ts" line="727" assertions="0" />
+      <testcase name="--only filters which packages are fetched and bumped" classname="run (update)" time="0.003133" file="tests/update-latest.test.ts" line="712" assertions="0" />
+    </testsuite>
+    <testsuite name="buildWorkFiles / collectMemberNames" file="tests/update-latest.test.ts" line="464" tests="1" assertions="0" failures="0" skipped="0" time="0.003" hostname="ubuntu">
+      <testcase name="no workspaces -&gt; root only" classname="buildWorkFiles / collectMemberNames" time="0.003099" file="tests/update-latest.test.ts" line="497" assertions="0" />
+    </testsuite>
+    <testsuite name="main" file="tests/update-latest.test.ts" line="989" tests="2" assertions="0" failures="0" skipped="0" time="0.004" hostname="ubuntu">
+      <testcase name="propagates a non-zero install exit code" classname="main" time="0.002917" file="tests/update-latest.test.ts" line="1011" assertions="0" />
+      <testcase name="parses argv, runs (dry-run) and returns 0" classname="main" time="0.002897" file="tests/update-latest.test.ts" line="990" assertions="0" />
+    </testsuite>
+    <testsuite name="terminal output (captured via the injected Console)" file="tests/update-latest.test.ts" line="1032" tests="3" assertions="0" failures="0" skipped="0" time="0.007" hostname="ubuntu">
+      <testcase name="runUpdate: a fetch failure prints ✗ to stderr; others still ↑ to stdout" classname="terminal output (captured via the injected Console)" time="0.002669" file="tests/update-latest.test.ts" line="1065" assertions="0" />
+      <testcase name="main: a missing file prints &quot;Not found:&quot; to stderr and returns 1" classname="terminal output (captured via the injected Console)" time="0.00227" file="tests/update-latest.test.ts" line="1133" assertions="0" />
+      <testcase name="runUpdate: a real write run prints &quot;Running bun install…&quot; to stdout and spawns install" classname="terminal output (captured via the injected Console)" time="0.003017" file="tests/update-latest.test.ts" line="1081" assertions="0" />
+    </testsuite>
+    <testsuite name="buildWorkFiles / collectMemberNames" file="tests/update-latest.test.ts" line="464" tests="1" assertions="0" failures="0" skipped="0" time="0.003" hostname="ubuntu">
+      <testcase name="non-recursive -&gt; root only" classname="buildWorkFiles / collectMemberNames" time="0.003482" file="tests/update-latest.test.ts" line="473" assertions="0" />
+    </testsuite>
+    <testsuite name="terminal output (captured via the injected Console)" file="tests/update-latest.test.ts" line="1032" tests="3" assertions="0" failures="0" skipped="0" time="0.008" hostname="ubuntu">
+      <testcase name="runUpdate: header, per-bump ↑ line, and summary go to stdout; stderr stays empty" classname="terminal output (captured via the injected Console)" time="0.002322" file="tests/update-latest.test.ts" line="1033" assertions="0" />
+      <testcase name="runUpdate: empty plan prints &quot;No bumpable entries&quot; and fetches nothing" classname="terminal output (captured via the injected Console)" time="0.002412" file="tests/update-latest.test.ts" line="1050" assertions="0" />
+      <testcase name="runToCatalog: an already-catalog tree prints &quot;Nothing to convert&quot;" classname="terminal output (captured via the injected Console)" time="0.004181" file="tests/update-latest.test.ts" line="1116" assertions="0" />
+    </testsuite>
+    <testsuite name="run (update)" file="tests/update-latest.test.ts" line="623" tests="4" assertions="0" failures="0" skipped="0" time="0.016" hostname="ubuntu">
+      <testcase name="recursively bumps members, dedupes fetches, skips internal/protocol/sentinel" classname="run (update)" time="0.004715" file="tests/update-latest.test.ts" line="654" assertions="0" />
+      <testcase name="runs a single install at the root when changes are written" classname="run (update)" time="0.004714" file="tests/update-latest.test.ts" line="693" assertions="0" />
+      <testcase name="a non-zero install exit is surfaced as installExitCode" classname="run (update)" time="0.004752" file="tests/update-latest.test.ts" line="704" assertions="0" />
+      <testcase name="--dry-run writes nothing and never spawns install" classname="run (update)" time="0.004695" file="tests/update-latest.test.ts" line="682" assertions="0" />
+    </testsuite>
+    <testsuite name="buildWorkFiles / collectMemberNames" file="tests/update-latest.test.ts" line="464" tests="1" assertions="0" failures="0" skipped="0" time="0.004" hostname="ubuntu">
+      <testcase name="recursive array-form -&gt; root + members, each with its own entries" classname="buildWorkFiles / collectMemberNames" time="0.00467" file="tests/update-latest.test.ts" line="481" assertions="0" />
+    </testsuite>
+    <testsuite name="terminal output (captured via the injected Console)" file="tests/update-latest.test.ts" line="1032" tests="1" assertions="0" failures="0" skipped="0" time="0.004" hostname="ubuntu">
+      <testcase name="runToCatalog: prints &quot;+ catalog ·&quot; rows + summary to stdout, &quot;!&quot; conflicts to stderr" classname="terminal output (captured via the injected Console)" time="0.004303" file="tests/update-latest.test.ts" line="1096" assertions="0" />
+    </testsuite>
+    <testsuite name="readPackageName" file="tests/update-latest.test.ts" line="385" tests="1" assertions="0" failures="0" skipped="0" time="0" hostname="ubuntu">
+      <testcase name="reads string name or undefined" classname="readPackageName" time="0.00022" file="tests/update-latest.test.ts" line="386" assertions="0" />
+    </testsuite>
+    <testsuite name="unifyPrefix" file="tests/update-latest.test.ts" line="563" tests="1" assertions="0" failures="0" skipped="0" time="0" hostname="ubuntu">
+      <testcase name="most-permissive wins" classname="unifyPrefix" time="0.000021" file="tests/update-latest.test.ts" line="564" assertions="0" />
+    </testsuite>
+    <testsuite name="mapConcurrent" file="tests/update-latest.test.ts" line="573" tests="1" assertions="0" failures="0" skipped="0" time="0" hostname="ubuntu">
+      <testcase name="maps with a concurrency limit, preserving order" classname="mapConcurrent" time="0.000032" file="tests/update-latest.test.ts" line="574" assertions="0" />
+    </testsuite>
+    <testsuite name="findEntries" file="tests/update-latest.test.ts" line="249" tests="5" assertions="0" failures="0" skipped="0" time="0" hostname="ubuntu">
+      <testcase name="sentinels collected only with resolveSentinels" classname="findEntries" time="0.000064" file="tests/update-latest.test.ts" line="329" assertions="0" />
+      <testcase name="collects catalog, named catalogs (nested + top-level) and dep fields" classname="findEntries" time="0.000154" file="tests/update-latest.test.ts" line="286" assertions="0" />
+      <testcase name="non-string/identifier/numeric keys do not throw and are ignored" classname="findEntries" time="0.00007" file="tests/update-latest.test.ts" line="318" assertions="0" />
+      <testcase name="empty / non-object / array roots yield no entries" classname="findEntries" time="0.000038" file="tests/update-latest.test.ts" line="323" assertions="0" />
+      <testcase name="value-span offsets land on the quoted version literal" classname="findEntries" time="0.000085" file="tests/update-latest.test.ts" line="309" assertions="0" />
+    </testsuite>
+    <testsuite name="fetchLatest" file="tests/update-latest.test.ts" line="585" tests="3" assertions="0" failures="0" skipped="0" time="0.004" hostname="ubuntu">
+      <testcase name="404 throws with status" classname="fetchLatest" time="0.004626" file="tests/update-latest.test.ts" line="597" assertions="0" />
+      <testcase name="rejects bodies without a string version" classname="fetchLatest" time="0.000132" file="tests/update-latest.test.ts" line="602" assertions="0" />
+      <testcase name="200 returns version and encodes scoped names with %2F" classname="fetchLatest" time="0.000043" file="tests/update-latest.test.ts" line="586" assertions="0" />
+    </testsuite>
+    <testsuite name="run (--to-catalog)" file="tests/update-latest.test.ts" line="751" tests="6" assertions="0" failures="0" skipped="0" time="0.03" hostname="ubuntu">
+      <testcase name="runs a single install at the root after migrating when --install is set" classname="run (--to-catalog)" time="0.005483" file="tests/update-latest.test.ts" line="934" assertions="0" />
+      <testcase name="object-form with an existing catalog merges only missing entries" classname="run (--to-catalog)" time="0.005477" file="tests/update-latest.test.ts" line="869" assertions="0" />
+      <testcase name="object-form with an empty catalog populates it" classname="run (--to-catalog)" time="0.005486" file="tests/update-latest.test.ts" line="896" assertions="0" />
+      <testcase name="is idempotent: an already-catalogued workspace is a no-op" classname="run (--to-catalog)" time="0.005423" file="tests/update-latest.test.ts" line="950" assertions="0" />
+      <testcase name="object-form without a catalog inserts one" classname="run (--to-catalog)" time="0.005421" file="tests/update-latest.test.ts" line="845" assertions="0" />
+      <testcase name="a fetch failure leaves that dependency untouched and uncatalogued" classname="run (--to-catalog)" time="0.005459" file="tests/update-latest.test.ts" line="821" assertions="0" />
+    </testsuite>
+    <testsuite name="describeSource" file="tests/update-latest.test.ts" line="527" tests="1" assertions="0" failures="0" skipped="0" time="0" hostname="ubuntu">
+      <testcase name="labels each variant" classname="describeSource" time="0.000025" file="tests/update-latest.test.ts" line="528" assertions="0" />
+    </testsuite>
+    <testsuite name="detectIndentUnit / formatJsonArray / formatJsonObject" file="tests/update-latest.test.ts" line="535" tests="3" assertions="0" failures="0" skipped="0" time="0" hostname="ubuntu">
+      <testcase name="formatJsonObject" classname="detectIndentUnit / formatJsonArray / formatJsonObject" time="0.000028" file="tests/update-latest.test.ts" line="548" assertions="0" />
+      <testcase name="formatJsonArray" classname="detectIndentUnit / formatJsonArray / formatJsonObject" time="0.00001" file="tests/update-latest.test.ts" line="543" assertions="0" />
+      <testcase name="detectIndentUnit" classname="detectIndentUnit / formatJsonArray / formatJsonObject" time="0.000021" file="tests/update-latest.test.ts" line="536" assertions="0" />
+    </testsuite>
+    <testsuite name="propKey" file="tests/update-latest.test.ts" line="336" tests="1" assertions="0" failures="0" skipped="0" time="0" hostname="ubuntu">
+      <testcase name="reads the key of a string-named property" classname="propKey" time="0.000102" file="tests/update-latest.test.ts" line="337" assertions="0" />
+    </testsuite>
+    <testsuite name="run (--to-catalog)" file="tests/update-latest.test.ts" line="751" tests="3" assertions="0" failures="0" skipped="0" time="0.015" hostname="ubuntu">
+      <testcase name="does not duplicate a catalog entry that already exists" classname="run (--to-catalog)" time="0.005657" file="tests/update-latest.test.ts" line="911" assertions="0" />
+      <testcase name="array-form: rewrites workspaces to a sorted catalog, unifies conflicts, rewrites members" classname="run (--to-catalog)" time="0.005754" file="tests/update-latest.test.ts" line="776" assertions="0" />
+      <testcase name="--dry-run writes nothing" classname="run (--to-catalog)" time="0.005675" file="tests/update-latest.test.ts" line="812" assertions="0" />
+    </testsuite>
+    <testsuite name="isBumpableRange" file="tests/update-latest.test.ts" line="183" tests="3" assertions="0" failures="0" skipped="0" time="0" hostname="ubuntu">
+      <testcase name="plain semver (incl. partial-x) is bumpable" classname="isBumpableRange" time="0.000018" file="tests/update-latest.test.ts" line="213" assertions="0" />
+      <testcase name="sentinels are skipped by default, bumpable with --resolve-sentinels" classname="isBumpableRange" time="0.000015" file="tests/update-latest.test.ts" line="206" assertions="0" />
+      <testcase name="protocol specifiers are never bumpable" classname="isBumpableRange" time="0.000015" file="tests/update-latest.test.ts" line="184" assertions="0" />
+    </testsuite>
+    <testsuite name="readWorkspacePatterns" file="tests/update-latest.test.ts" line="354" tests="6" assertions="0" failures="0" skipped="0" time="0" hostname="ubuntu">
+      <testcase name="array form" classname="readWorkspacePatterns" time="0.000048" file="tests/update-latest.test.ts" line="355" assertions="0" />
+      <testcase name="object form without `packages` -&gt; []" classname="readWorkspacePatterns" time="0.000043" file="tests/update-latest.test.ts" line="366" assertions="0" />
+      <testcase name="negation + multi-glob preserved verbatim" classname="readWorkspacePatterns" time="0.000031" file="tests/update-latest.test.ts" line="377" assertions="0" />
+      <testcase name="absent workspaces / non-object root -&gt; []" classname="readWorkspacePatterns" time="0.000046" file="tests/update-latest.test.ts" line="372" assertions="0" />
+      <testcase name="non-array/non-object workspaces -&gt; []" classname="readWorkspacePatterns" time="0.000015" file="tests/update-latest.test.ts" line="369" assertions="0" />
+      <testcase name="object form reads `packages`" classname="readWorkspacePatterns" time="0.000022" file="tests/update-latest.test.ts" line="361" assertions="0" />
+    </testsuite>
+    <testsuite name="discoverMemberFiles" file="tests/update-latest.test.ts" line="398" tests="1" assertions="0" failures="0" skipped="0" time="0.006" hostname="ubuntu">
+      <testcase name="drops the root package.json itself" classname="discoverMemberFiles" time="0.006179" file="tests/update-latest.test.ts" line="445" assertions="0" />
+    </testsuite>
+    <testsuite name="run (--to-catalog)" file="tests/update-latest.test.ts" line="751" tests="1" assertions="0" failures="0" skipped="0" time="0.006" hostname="ubuntu">
+      <testcase name="errors when the target is not a workspace" classname="run (--to-catalog)" time="0.006148" file="tests/update-latest.test.ts" line="972" assertions="0" />
+    </testsuite>
+    <testsuite name="discoverMemberFiles" file="tests/update-latest.test.ts" line="398" tests="5" assertions="0" failures="0" skipped="0" time="0.035" hostname="ubuntu">
+      <testcase name="honors `!` negation" classname="discoverMemberFiles" time="0.00769" file="tests/update-latest.test.ts" line="428" assertions="0" />
+      <testcase name="dedupes overlapping globs and returns absolute paths" classname="discoverMemberFiles" time="0.007703" file="tests/update-latest.test.ts" line="437" assertions="0" />
+      <testcase name="expands `*` globs, skipping dirs without a package.json" classname="discoverMemberFiles" time="0.007719" file="tests/update-latest.test.ts" line="410" assertions="0" />
+      <testcase name="no matches -&gt; []" classname="discoverMemberFiles" time="0.007728" file="tests/update-latest.test.ts" line="453" assertions="0" />
+      <testcase name="handles literal member paths" classname="discoverMemberFiles" time="0.007732" file="tests/update-latest.test.ts" line="421" assertions="0" />
+    </testsuite>
+    <testsuite name="parseArgs" file="tests/update-latest.test.ts" line="136" tests="5" assertions="0" failures="0" skipped="0" time="0" hostname="ubuntu">
+      <testcase name="unknown flag throws" classname="parseArgs" time="0.000023" file="tests/update-latest.test.ts" line="174" assertions="0" />
+      <testcase name="boolean + value flags" classname="parseArgs" time="0.000079" file="tests/update-latest.test.ts" line="149" assertions="0" />
+      <testcase name="`-r` is a recursive flag, not a positional file" classname="parseArgs" time="0.000012" file="tests/update-latest.test.ts" line="167" assertions="0" />
+      <testcase name="defaults" classname="parseArgs" time="0.000015" file="tests/update-latest.test.ts" line="137" assertions="0" />
+      <testcase name="positional file is absolute-resolved" classname="parseArgs" time="0.000009" file="tests/update-latest.test.ts" line="162" assertions="0" />
+    </testsuite>
+    <testsuite name="splitPrefix / bumpRange" file="tests/update-latest.test.ts" line="224" tests="2" assertions="0" failures="0" skipped="0" time="0" hostname="ubuntu">
+      <testcase name="bumpRange preserves prefix; equal range is a no-op" classname="splitPrefix / bumpRange" time="0.000012" file="tests/update-latest.test.ts" line="238" assertions="0" />
+      <testcase name="splits every prefix form" classname="splitPrefix / bumpRange" time="0.000047" file="tests/update-latest.test.ts" line="225" assertions="0" />
+    </testsuite>
+    <testsuite name="applyEdits" file="tests/update-latest.test.ts" line="511" tests="2" assertions="0" failures="0" skipped="0" time="0" hostname="ubuntu">
+      <testcase name="no edits returns the original text" classname="applyEdits" time="0.000007" file="tests/update-latest.test.ts" line="522" assertions="0" />
+      <testcase name="applies edits in descending order, preserving surrounding text" classname="applyEdits" time="0.00002" file="tests/update-latest.test.ts" line="512" assertions="0" />
+    </testsuite>
+    <testsuite name="main" file="tests/update-latest.test.ts" line="989" tests="1" assertions="0" failures="0" skipped="0" time="0.004" hostname="ubuntu">
+      <testcase name="returns 1 when the target file is missing" classname="main" time="0.004442" file="tests/update-latest.test.ts" line="1003" assertions="0" />
+    </testsuite>
+    <testsuite name="run (update)" file="tests/update-latest.test.ts" line="623" tests="2" assertions="0" failures="0" skipped="0" time="0.01" hostname="ubuntu">
+      <testcase name="reports nothing to do when no bumpable entries exist" classname="run (update)" time="0.00576" file="tests/update-latest.test.ts" line="727" assertions="0" />
+      <testcase name="--only filters which packages are fetched and bumped" classname="run (update)" time="0.005754" file="tests/update-latest.test.ts" line="712" assertions="0" />
+    </testsuite>
+    <testsuite name="buildWorkFiles / collectMemberNames" file="tests/update-latest.test.ts" line="464" tests="1" assertions="0" failures="0" skipped="0" time="0.005" hostname="ubuntu">
+      <testcase name="no workspaces -&gt; root only" classname="buildWorkFiles / collectMemberNames" time="0.005712" file="tests/update-latest.test.ts" line="497" assertions="0" />
+    </testsuite>
+    <testsuite name="main" file="tests/update-latest.test.ts" line="989" tests="2" assertions="0" failures="0" skipped="0" time="0.01" hostname="ubuntu">
+      <testcase name="propagates a non-zero install exit code" classname="main" time="0.005496" file="tests/update-latest.test.ts" line="1011" assertions="0" />
+      <testcase name="parses argv, runs (dry-run) and returns 0" classname="main" time="0.005542" file="tests/update-latest.test.ts" line="990" assertions="0" />
+    </testsuite>
+    <testsuite name="terminal output (captured via the injected Console)" file="tests/update-latest.test.ts" line="1032" tests="3" assertions="0" failures="0" skipped="0" time="0.014" hostname="ubuntu">
+      <testcase name="runUpdate: a fetch failure prints ✗ to stderr; others still ↑ to stdout" classname="terminal output (captured via the injected Console)" time="0.00526" file="tests/update-latest.test.ts" line="1065" assertions="0" />
+      <testcase name="runUpdate: a real write run prints &quot;Running bun install…&quot; to stdout and spawns install" classname="terminal output (captured via the injected Console)" time="0.005206" file="tests/update-latest.test.ts" line="1081" assertions="0" />
+      <testcase name="main: a missing file prints &quot;Not found:&quot; to stderr and returns 1" classname="terminal output (captured via the injected Console)" time="0.00444" file="tests/update-latest.test.ts" line="1133" assertions="0" />
+    </testsuite>
+    <testsuite name="buildWorkFiles / collectMemberNames" file="tests/update-latest.test.ts" line="464" tests="1" assertions="0" failures="0" skipped="0" time="0.006" hostname="ubuntu">
+      <testcase name="non-recursive -&gt; root only" classname="buildWorkFiles / collectMemberNames" time="0.006668" file="tests/update-latest.test.ts" line="473" assertions="0" />
+    </testsuite>
+    <testsuite name="terminal output (captured via the injected Console)" file="tests/update-latest.test.ts" line="1032" tests="2" assertions="0" failures="0" skipped="0" time="0.008" hostname="ubuntu">
+      <testcase name="runUpdate: empty plan prints &quot;No bumpable entries&quot; and fetches nothing" classname="terminal output (captured via the injected Console)" time="0.00452" file="tests/update-latest.test.ts" line="1050" assertions="0" />
+      <testcase name="runUpdate: header, per-bump ↑ line, and summary go to stdout; stderr stays empty" classname="terminal output (captured via the injected Console)" time="0.004548" file="tests/update-latest.test.ts" line="1033" assertions="0" />
+    </testsuite>
+    <testsuite name="run (update)" file="tests/update-latest.test.ts" line="623" tests="3" assertions="0" failures="0" skipped="0" time="0.027" hostname="ubuntu">
+      <testcase name="a non-zero install exit is surfaced as installExitCode" classname="run (update)" time="0.009436" file="tests/update-latest.test.ts" line="704" assertions="0" />
+      <testcase name="runs a single install at the root when changes are written" classname="run (update)" time="0.009438" file="tests/update-latest.test.ts" line="693" assertions="0" />
+      <testcase name="recursively bumps members, dedupes fetches, skips internal/protocol/sentinel" classname="run (update)" time="0.009449" file="tests/update-latest.test.ts" line="654" assertions="0" />
+    </testsuite>
+    <testsuite name="buildWorkFiles / collectMemberNames" file="tests/update-latest.test.ts" line="464" tests="1" assertions="0" failures="0" skipped="0" time="0.009" hostname="ubuntu">
+      <testcase name="recursive array-form -&gt; root + members, each with its own entries" classname="buildWorkFiles / collectMemberNames" time="0.009375" file="tests/update-latest.test.ts" line="481" assertions="0" />
+    </testsuite>
+    <testsuite name="run (update)" file="tests/update-latest.test.ts" line="623" tests="1" assertions="0" failures="0" skipped="0" time="0.009" hostname="ubuntu">
+      <testcase name="--dry-run writes nothing and never spawns install" classname="run (update)" time="0.009419" file="tests/update-latest.test.ts" line="682" assertions="0" />
+    </testsuite>
+    <testsuite name="terminal output (captured via the injected Console)" file="tests/update-latest.test.ts" line="1032" tests="2" assertions="0" failures="0" skipped="0" time="0.018" hostname="ubuntu">
+      <testcase name="runToCatalog: an already-catalog tree prints &quot;Nothing to convert&quot;" classname="terminal output (captured via the injected Console)" time="0.007304" file="tests/update-latest.test.ts" line="1116" assertions="0" />
+      <testcase name="runToCatalog: prints &quot;+ catalog ·&quot; rows + summary to stdout, &quot;!&quot; conflicts to stderr" classname="terminal output (captured via the injected Console)" time="0.011636" file="tests/update-latest.test.ts" line="1096" assertions="0" />
+    </testsuite>
+  </testsuite>
+</testsuites>

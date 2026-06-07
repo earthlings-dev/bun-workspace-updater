@@ -1,3 +1,7 @@
+// Shared strict TypeScript base, extended by tsconfig.json. Bun-first, ESM-only,
+// no emit (declarations and JS come from Bun at runtime); the strict flags below
+// (exactOptionalPropertyTypes, noUncheckedIndexedAccess, verbatimModuleSyntax, …)
+// are what the source is written against.
 {
   "compilerOptions": {
     // Environment setup & latest features

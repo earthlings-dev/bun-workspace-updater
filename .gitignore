@@ -28,8 +28,8 @@ pids
 lib-cov
 
 # Coverage directory used by tools like istanbul
-coverage
 *.lcov
+*.tmp
 
 # nyc test coverage
 .nyc_output
