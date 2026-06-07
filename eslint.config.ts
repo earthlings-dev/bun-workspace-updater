@@ -38,13 +38,56 @@ export default defineConfig(
         tsconfigRootDir: import.meta.dir,
       },
     },
-  },
-
-  // Tests live outside the type-checking program (tsconfig.json scopes it to `src`
-  // and this config), so the type-aware rules cannot resolve them. Disable only the
-  // type-checked rules for tests; every syntactic and @stylistic rule still applies.
-  {
-    files: ['tests/**/*.ts'],
-    extends: [tseslint.configs.disableTypeChecked],
+    // Strict opt-in rules beyond `strictTypeChecked`. The type-aware ones
+    // (strict-boolean-expressions, switch-exhaustiveness-check, require-array-sort-compare,
+    // prefer-readonly-parameter-types, promise-function-async) are auto-disabled for tests
+    // by `disableTypeChecked` below; the rest are syntactic and apply everywhere.
+    rules: {
+      // A — enforce the repo's own bans (no casts; no implicit truthiness):
+      '@typescript-eslint/consistent-type-assertions': ['error', { assertionStyle: 'never' }],
+      '@typescript-eslint/strict-boolean-expressions': [
+        'error',
+        { allowString: false, allowNumber: false, allowNullableObject: false },
+      ],
+      // B — stricter typing:
+      '@typescript-eslint/explicit-module-boundary-types': 'error',
+      '@typescript-eslint/switch-exhaustiveness-check': [
+        'error',
+        { considerDefaultExhaustiveForUnions: true },
+      ],
+      '@typescript-eslint/method-signature-style': ['error', 'property'],
+      '@typescript-eslint/consistent-type-imports': ['error', { fixStyle: 'inline-type-imports' }],
+      // C — correctness / immutability:
+      '@typescript-eslint/require-array-sort-compare': ['error', { ignoreStringArrays: true }],
+      // Parameters must be deeply readonly. `treatMethodsAsReadonly` lets us pass the real
+      // upstream types directly (a `ts.Node`'s props are `readonly` by design; only its
+      // methods looked "mutable"); `ignoreInferredTypes` skips inline callbacks whose param
+      // types we don't annotate. No wrappers, no widening — the real definitions are shared.
+      '@typescript-eslint/prefer-readonly-parameter-types': [
+        'error',
+        {
+          treatMethodsAsReadonly: true,
+          ignoreInferredTypes: true,
+          // Allow the literal external types we only ever read: the TypeScript
+          // compiler AST nodes (their public surface is `readonly`; only their deep
+          // internal graph looks mutable) and `RegExp`. This restricts misuse of our
+          // OWN types while sharing the real external definitions — no facsimiles.
+          allow: [
+            {
+              from: 'package',
+              package: 'typescript',
+              name: [
+                'JsonSourceFile',
+                'PropertyAssignment',
+                'ObjectLiteralExpression',
+                'ArrayLiteralExpression',
+              ],
+            },
+            'RegExp',
+          ],
+        },
+      ],
+      '@typescript-eslint/promise-function-async': 'error',
+    },
   },
 );

@@ -17,21 +17,22 @@ lockfile = true
 [test]
 root = "."
 pathIgnorePatterns = ["**/node_modules/**", "coverage/**"]
-# preload = ["./preload.ts"]
+# Registers `mock.module('bun', …)` before any test file imports `src` (see tests/preload.ts).
+preload = ["./tests/preload.ts"]
 timeout = 5000
 smol = false
 # Uncomment seed for debugging
 # seed = 2444615283
-# Tests are order-randomized and each runs 3x (rerunEach) to surface flakiness;
-# `*.concurrent.test.ts` files run concurrently. The `test` script adds `--parallel
-# --concurrent`, and the suite is written (via dependency injection) to pass under it.
+# Tests are order-randomized and each runs 3x (rerunEach) to surface flakiness. The `test`
+# script is plain `bun test`: pure-logic tests opt into concurrency via `test.concurrent`,
+# while host-effect tests that `spyOn` a process-global run serially (plain `test`).
 randomize = true
 rerunEach = 3
 concurrentTestGlob = "**/*.concurrent.test.ts"
 coverage = true
 coverageSkipTestFiles = false
-# Hard gate: a run below any of these thresholds fails. Keeping the suite in one file
-# keeps `--parallel` a single worker so coverage merges into one accurate number.
+# Hard gate: a run below any of these thresholds fails. The whole suite is one file, so
+# coverage merges into one accurate number.
 coverageThreshold = { line = 0.95, function = 0.95, statement = 0.95 }
 coverageReporter = ["text", "lcov"]
 # Output dir is intentionally tracked in git (see README / AGENTS.md); not ignored.

@@ -1,0 +1,22 @@
+{
+  "threshold": 0,
+  "reporters": [
+    "html",
+    "console"
+  ],
+  "ignore": [
+    "**/__snapshots__/**",
+    "**/node_modules/**",
+    "**/.cache/**",
+    "**/dist/**",
+    "**/coverage/**",
+    "**/cov/**",
+    "**/reports/**",
+    "**/build/**",
+    "**/target/**",
+    "**/vendor/**"
+  ],
+  "absolute": true,
+  "minLines": 5,
+  "minTokens": 50
+}

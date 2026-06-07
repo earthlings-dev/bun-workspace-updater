@@ -1,12 +1,12 @@
-// Project config for `bun run typecheck` (tsc --noEmit). Extends the strict shared
-// base and scopes the type-checking program to `src/` plus `eslint.config.ts` (the
-// latter so typescript-eslint's project service can type-check the ESLint config
-// itself). Tests under `tests/` are run by Bun's test runner (`bun run test`), which
-// transpiles rather than type-checks them, so they are not covered by this config.
+// Project config for `bun run typecheck` (tsc --noEmit) and typescript-eslint's project
+// service. Extends the strict shared base and includes the WHOLE codebase — `src/`,
+// `tests/`, and `eslint.config.ts` — so strict type-checking and type-aware linting cover
+// every file. Nothing is exempted from the strict ruleset; tests are type-checked too.
 {
   "extends": "./tsconfig.strict.json",
   "include": [
     "src",
+    "tests",
     "eslint.config.ts"
   ],
   "exclude": [

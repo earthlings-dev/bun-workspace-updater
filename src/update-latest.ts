@@ -29,6 +29,7 @@
  */
 import { dirname, resolve } from 'node:path';
 
+import { fetch, spawn, write } from 'bun';
 import ts from 'typescript';
 
 // ---------------------------------------------------------------------------
@@ -90,7 +91,7 @@ export function parseArgs(argv: readonly string[]): Options {
     else if (arg === '--only') {
       only = new RegExp(argv[++i] ?? '');
     }
-    else if (arg?.startsWith('--')) {
+    else if (arg !== undefined && arg.startsWith('--')) {
       throw new Error(`Unknown flag: ${arg}`);
     }
     else if (arg !== undefined && arg.length > 0) {
@@ -245,14 +246,14 @@ function findProperty(
   return undefined;
 }
 
-/** Push an {@link Entry} for each `"pkg": "<bumpable range>"` pair in `obj`, tagged with `source`. */
+/** Return an {@link Entry} for each `"pkg": "<bumpable range>"` pair in `obj`, tagged with `source`. */
 function collectStringMap(
   obj: ts.ObjectLiteralExpression,
   source: EntrySource,
   sourceFile: ts.JsonSourceFile,
   resolveSentinels: boolean,
-  out: Entry[],
-): void {
+): Entry[] {
+  const out: Entry[] = [];
   for (const prop of obj.properties) {
     if (!ts.isPropertyAssignment(prop)) {
       continue;
@@ -277,6 +278,7 @@ function collectStringMap(
       source,
     });
   }
+  return out;
 }
 
 /** Collect entries from a `catalogs` object: each property is a named catalog of `pkg → range`. */
@@ -284,8 +286,8 @@ function collectNamedCatalogs(
   obj: ts.ObjectLiteralExpression,
   sourceFile: ts.JsonSourceFile,
   resolveSentinels: boolean,
-  out: Entry[],
-): void {
+): Entry[] {
+  const out: Entry[] = [];
   for (const named of obj.properties) {
     if (!ts.isPropertyAssignment(named)) {
       continue;
@@ -295,8 +297,9 @@ function collectNamedCatalogs(
       continue;
     }
     const src: NamedCatalogSource = { kind: NAMED_CATALOG_KIND, name };
-    collectStringMap(named.initializer, src, sourceFile, resolveSentinels, out);
+    out.push(...collectStringMap(named.initializer, src, sourceFile, resolveSentinels));
   }
+  return out;
 }
 
 /**
@@ -330,10 +333,10 @@ export function findEntries(sourceFile: ts.JsonSourceFile, resolveSentinels: boo
         const subKey = propKey(sub);
         if (subKey === 'catalog' && ts.isObjectLiteralExpression(sub.initializer)) {
           const src: CatalogSource = { kind: CATALOG_KIND };
-          collectStringMap(sub.initializer, src, sourceFile, resolveSentinels, entries);
+          entries.push(...collectStringMap(sub.initializer, src, sourceFile, resolveSentinels));
         }
         else if (subKey === 'catalogs' && ts.isObjectLiteralExpression(sub.initializer)) {
-          collectNamedCatalogs(sub.initializer, sourceFile, resolveSentinels, entries);
+          entries.push(...collectNamedCatalogs(sub.initializer, sourceFile, resolveSentinels));
         }
       }
       continue;
@@ -341,19 +344,19 @@ export function findEntries(sourceFile: ts.JsonSourceFile, resolveSentinels: boo
 
     if (key === 'catalog' && ts.isObjectLiteralExpression(init)) {
       const src: CatalogSource = { kind: CATALOG_KIND };
-      collectStringMap(init, src, sourceFile, resolveSentinels, entries);
+      entries.push(...collectStringMap(init, src, sourceFile, resolveSentinels));
       continue;
     }
 
     if (key === 'catalogs' && ts.isObjectLiteralExpression(init)) {
-      collectNamedCatalogs(init, sourceFile, resolveSentinels, entries);
+      entries.push(...collectNamedCatalogs(init, sourceFile, resolveSentinels));
       continue;
     }
 
     const field = DEP_FIELDS.find(f => f === key);
     if (field !== undefined && ts.isObjectLiteralExpression(init)) {
       const src: DepsSource = { kind: DEPS_KIND, field };
-      collectStringMap(init, src, sourceFile, resolveSentinels, entries);
+      entries.push(...collectStringMap(init, src, sourceFile, resolveSentinels));
     }
   }
 
@@ -495,7 +498,7 @@ export async function buildWorkFiles(
     return [rootWF];
   }
   const memberPaths = await discoverMemberFiles(dirname(rootPath), patterns);
-  const members = await Promise.all(memberPaths.map(p => readWorkFile(p, resolveSentinels)));
+  const members = await Promise.all(memberPaths.map(async p => await readWorkFile(p, resolveSentinels)));
   return [rootWF, ...members];
 }
 
@@ -536,21 +539,14 @@ export function bumpRange(oldRange: string, latest: string): string {
 // Registry lookup
 // ---------------------------------------------------------------------------
 
-/** The network seam, injected into `run` via `HostIo` so tests mock it at the collaborator level. */
-export type FetchLatest = (pkg: string, tag: string) => Promise<string>;
-
 /**
  * Resolve `pkg`'s version for dist-tag `tag` from the npm registry. Scoped names
  * are `%2F`-encoded; a non-2xx response or a body without a non-empty string
- * `version` throws. `doFetch` is injectable so tests supply the network.
+ * `version` throws. Calls the real `fetch`; tests `spyOn(globalThis, 'fetch')`.
  */
-export async function fetchLatest(
-  pkg: string,
-  tag: string,
-  doFetch: typeof fetch = fetch,
-): Promise<string> {
+export async function fetchLatest(pkg: string, tag: string): Promise<string> {
   const url = `https://registry.npmjs.org/${pkg.replace('/', '%2F')}/${encodeURIComponent(tag)}`;
-  const res = await doFetch(url, { headers: { accept: 'application/json' } });
+  const res = await fetch(url, { headers: { accept: 'application/json' } });
   if (!res.ok) {
     throw new Error(`GET ${url} → ${String(res.status)} ${res.statusText}`);
   }
@@ -681,11 +677,10 @@ function formatRawObject(
 // Subprocess
 // ---------------------------------------------------------------------------
 
-/** Run one `bun install` (with `AGENT=1`) in the root file's directory; resolves its exit code. */
-async function runInstall(io: HostIo, rootFile: string): Promise<number> {
-  io.console.log('\nRunning bun install…');
-  const proc = io.spawn(['bun', 'install'], {
-    cwd: dirname(rootFile),
+/** Run one `bun install` (with `AGENT=1`) in `cwd`; resolves its exit code. Uses the real `bun` `spawn`; tests mock it via `mock.module('bun', …)`. */
+async function installDeps(cwd: string): Promise<number> {
+  const proc = spawn(['bun', 'install'], {
+    cwd,
     stdout: 'inherit',
     stderr: 'inherit',
     env: { ...process.env, AGENT: '1' },
@@ -697,26 +692,10 @@ async function runInstall(io: HostIo, rootFile: string): Promise<number> {
 // Orchestration
 // ---------------------------------------------------------------------------
 
-// Host effects injected as a separate explicit boundary (not on Options), with the real host types
-// and defaulted to the real surfaces. Tests pass per-test `mock()`s so nothing global is touched —
-// which is what makes every test safe under `--concurrent` and `--parallel`. Terminal output is a
-// host effect too, so the real `Console` crosses this same boundary — modeled directly as `typeof
-// console` (the full upstream surface, like `write`/`spawn` reference `Bun.{write,spawn}`), not a
-// hand-picked subset. Tests inject a per-test capturing `Console` (`new Console` over capturing
-// streams) instead of spying the shared global or leaking to the real stream.
-export interface HostIo {
-  readonly fetchLatest: FetchLatest;
-  readonly write: typeof Bun.write;
-  readonly spawn: typeof Bun.spawn;
-  readonly console: typeof console;
-}
-
-const REAL_IO: HostIo = {
-  fetchLatest,
-  write: Bun.write,
-  spawn: Bun.spawn,
-  console,
-};
+// The mutable host effects are imported from the `bun` module (`fetch`/`write`/`spawn`, above) so tests
+// replace them at the module boundary with `mock.module('bun', …)` registered via `--preload` (it must
+// be mocked before this module is imported). Output uses `console.*` (tests `spyOn(console, …)`); reads
+// use the global `Bun.file`/`Bun.Glob` and stay real (unmocked).
 
 /** Machine-readable summary of a run; `installExitCode` is `null` when no install ran. */
 export interface RunResult {
@@ -729,8 +708,9 @@ export interface RunResult {
 }
 
 /** Entry orchestrator: dispatch to the `--to-catalog` migration or the normal bump path. */
-export async function run(opts: Options, io: HostIo = REAL_IO): Promise<RunResult> {
-  return opts.toCatalog ? runToCatalog(opts, io) : runUpdate(opts, io);
+export async function run(opts: Options): Promise<RunResult> {
+  const result = opts.toCatalog ? await runToCatalog(opts) : await runUpdate(opts);
+  return result;
 }
 
 /**
@@ -738,7 +718,7 @@ export async function run(opts: Options, io: HostIo = REAL_IO): Promise<RunResul
  * place across all work files, write changed files (unless `--dry-run`), and run a
  * single root `bun install` when anything changed.
  */
-async function runUpdate(opts: Options, io: HostIo): Promise<RunResult> {
+async function runUpdate(opts: Options): Promise<RunResult> {
   const files = await buildWorkFiles(opts.file, opts.recursive, opts.resolveSentinels);
   const memberNames = collectMemberNames(files);
   const onlyPattern = opts.only;
@@ -753,11 +733,11 @@ async function runUpdate(opts: Options, io: HostIo): Promise<RunResult> {
   const uniquePkgs = [...new Set(perFile.flatMap(f => f.entries.map(e => e.pkg)))];
 
   if (uniquePkgs.length === 0) {
-    io.console.log(`No bumpable entries in ${opts.file}`);
+    console.log(`No bumpable entries in ${opts.file}`);
     return { changed: 0, skipped: 0, failed: 0, filesWritten: [], installExitCode: null, warnings: [] };
   }
 
-  io.console.log(
+  console.log(
     `Checking ${String(uniquePkgs.length)} package(s) across ${String(files.length)} file(s)…`,
   );
 
@@ -765,7 +745,7 @@ async function runUpdate(opts: Options, io: HostIo): Promise<RunResult> {
   const failures = new Map<string, string>();
   await mapConcurrent(uniquePkgs, 10, async (pkg) => {
     try {
-      versions.set(pkg, await io.fetchLatest(pkg, opts.tag));
+      versions.set(pkg, await fetchLatest(pkg, opts.tag));
     }
     catch (err) {
       failures.set(pkg, err instanceof Error ? err.message : String(err));
@@ -785,7 +765,7 @@ async function runUpdate(opts: Options, io: HostIo): Promise<RunResult> {
       const latest = versions.get(entry.pkg);
       if (latest === undefined) {
         const reason = failures.get(entry.pkg) ?? 'unknown error';
-        io.console.warn(`  ✗ ${label}: ${reason}`);
+        console.warn(`  ✗ ${label}: ${reason}`);
         warnings.push(`${file.path}: ${entry.pkg}: ${reason}`);
         failed += 1;
         continue;
@@ -795,7 +775,7 @@ async function runUpdate(opts: Options, io: HostIo): Promise<RunResult> {
         skipped += 1;
         continue;
       }
-      io.console.log(`  ↑ ${label}: ${entry.currentRange} → ${nextRange}`);
+      console.log(`  ↑ ${label}: ${entry.currentRange} → ${nextRange}`);
       edits.push({ start: entry.start, end: entry.end, replacement: JSON.stringify(nextRange) });
       changed += 1;
     }
@@ -804,21 +784,22 @@ async function runUpdate(opts: Options, io: HostIo): Promise<RunResult> {
     }
     const updated = applyEdits(file.text, edits);
     if (!opts.dryRun) {
-      await io.write(file.path, updated);
+      await write(file.path, updated);
       filesWritten.push(file.path);
     }
   }
 
-  io.console.log(
+  console.log(
     `\n${String(changed)} changed · ${String(skipped)} already current · ${String(failed)} failed`,
   );
   if (opts.dryRun && changed > 0) {
-    io.console.log('\n(dry-run) no files written');
+    console.log('\n(dry-run) no files written');
   }
 
   let installExitCode: number | null = null;
   if (opts.install && !opts.dryRun && changed > 0) {
-    installExitCode = await runInstall(io, opts.file);
+    console.log('\nRunning bun install…');
+    installExitCode = await installDeps(dirname(opts.file));
   }
 
   return { changed, skipped, failed, filesWritten, installExitCode, warnings };
@@ -948,7 +929,7 @@ function buildWorkspacesEdit(
  * Idempotent (an already-catalogued tree is a no-op); errors if the root has no
  * `workspaces`.
  */
-async function runToCatalog(opts: Options, io: HostIo): Promise<RunResult> {
+async function runToCatalog(opts: Options): Promise<RunResult> {
   const files = await buildWorkFiles(opts.file, true, opts.resolveSentinels);
   const rootWF = files[0];
   if (rootWF === undefined) {
@@ -989,7 +970,7 @@ async function runToCatalog(opts: Options, io: HostIo): Promise<RunResult> {
     }
     let latest: string;
     try {
-      latest = await io.fetchLatest(pkg, opts.tag);
+      latest = await fetchLatest(pkg, opts.tag);
     }
     catch (err) {
       warnings.push(`skipped ${pkg} (fetch failed): ${err instanceof Error ? err.message : String(err)}`);
@@ -1054,31 +1035,32 @@ async function runToCatalog(opts: Options, io: HostIo): Promise<RunResult> {
     }
     const updated = applyEdits(file.text, fileEdits);
     if (!opts.dryRun) {
-      await io.write(file.path, updated);
+      await write(file.path, updated);
       filesWritten.push(file.path);
     }
   }
 
   for (const [pkg, range] of catalogEntries) {
-    io.console.log(`  + catalog · ${pkg}: ${range}`);
+    console.log(`  + catalog · ${pkg}: ${range}`);
   }
   for (const w of warnings) {
-    io.console.warn(`  ! ${w}`);
+    console.warn(`  ! ${w}`);
   }
   const failed = plan.size - catalogRanges.size;
-  io.console.log(
+  console.log(
     `\n${String(catalogEntries.length)} catalog entries · ${String(changed)} refs → "catalog:" · ${String(failed)} failed`,
   );
   if (changed === 0) {
-    io.console.log('Nothing to convert (already catalog-based?).');
+    console.log('Nothing to convert (already catalog-based?).');
   }
   if (opts.dryRun && changed > 0) {
-    io.console.log('\n(dry-run) no files written');
+    console.log('\n(dry-run) no files written');
   }
 
   let installExitCode: number | null = null;
   if (opts.install && !opts.dryRun && changed > 0) {
-    installExitCode = await runInstall(io, opts.file);
+    console.log('\nRunning bun install…');
+    installExitCode = await installDeps(dirname(opts.file));
   }
 
   return { changed, skipped: 0, failed, filesWritten, installExitCode, warnings };
@@ -1093,16 +1075,13 @@ async function runToCatalog(opts: Options, io: HostIo): Promise<RunResult> {
  * (`1` if the file is missing, otherwise the install exit code or `0`). Returning
  * the code (rather than calling `process.exit`) keeps `main` callable from tests.
  */
-export async function main(
-  argv: readonly string[] = process.argv.slice(2),
-  io: HostIo = REAL_IO,
-): Promise<number> {
+export async function main(argv: readonly string[] = process.argv.slice(2)): Promise<number> {
   const opts = parseArgs(argv);
   if (!(await Bun.file(opts.file).exists())) {
-    io.console.error(`Not found: ${opts.file}`);
+    console.error(`Not found: ${opts.file}`);
     return 1;
   }
-  const result = await run(opts, io);
+  const result = await run(opts);
   return result.installExitCode ?? 0;
 }
 

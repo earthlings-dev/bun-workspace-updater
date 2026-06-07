@@ -168,7 +168,7 @@ Every helper, the orchestrators, and the types are exported, so the module can b
 in-process (this is how the test suite exercises it without touching the network or disk):
 
 ```ts
-import { run, main, parseArgs, type HostIo, type RunResult } from './src/update-latest';
+import { run, main, parseArgs, type RunResult } from './src/update-latest';
 
 // Parse argv and run end-to-end, returning an exit code:
 const code = await main(['--dry-run', './package.json']);
@@ -177,20 +177,10 @@ const code = await main(['--dry-run', './package.json']);
 const result: RunResult = await run(parseArgs(['--dry-run']));
 ```
 
-All host effects are injected through a single explicit boundary, `HostIo`, defaulted to
-the real surfaces:
-
-```ts
-interface HostIo {
-  readonly fetchLatest: FetchLatest;   // npm registry lookup
-  readonly write: typeof Bun.write;    // file writes
-  readonly spawn: typeof Bun.spawn;    // `bun install`
-  readonly console: typeof console;    // terminal output (log/info → stdout, warn/error → stderr)
-}
-```
-
-Pass a custom `io` to `run(opts, io)` / `main(argv, io)` to capture or stub any of those
-effects. `run` returns a `RunResult`:
+`run(opts)` performs its host effects with the real APIs directly — `fetch` for the npm
+registry, `Bun.write` for files, `Bun.spawn` for `bun install`, and `console.*` for output.
+There is no injected boundary; tests mock the specific real invocation in place with `spyOn`
+(e.g. `spyOn(Bun, 'write')`). `run` returns a `RunResult`:
 
 ```ts
 interface RunResult {
@@ -227,8 +217,9 @@ Design conventions worth knowing (enforced by [`AGENTS.md`](AGENTS.md)):
 
 - **No top-level side effects** — the CLI runs only under `if (import.meta.main)`; importing
   the module is pure.
-- **Injected host boundary** — `HostIo` carries every side effect (network, writes, spawn,
-  and the real `Console`), so tests stay concurrent/parallel safe with zero global spying.
+- **Real host calls, mocked in place** — side effects are the real `fetch` / `Bun.write` /
+  `Bun.spawn` / `console.*`; tests `spyOn` the specific invocation, so there is no injected
+  boundary or wrapper standing between the code and the real API.
 - **Named discriminated-union variants** — each discriminant is one named constant referenced
   by both the type (`typeof`) and every construction site.
 
@@ -238,7 +229,7 @@ Design conventions worth knowing (enforced by [`AGENTS.md`](AGENTS.md)):
 bun run typecheck   # tsc --noEmit, strict shared config
 bun run lint        # eslint . — strict, type-aware flat config
 bun run lint:fix    # eslint . --fix
-bun run test        # bun test --parallel --concurrent (coverage to coverage/)
+bun run test        # bun test (coverage to coverage/)
 bun run lupdate     # alias for `bun run src/update-latest.ts`
 ```
 
@@ -264,20 +255,24 @@ native import for `.ts` whenever it detects Bun.
 
 ### Testing approach
 
-The suite is one file ([`tests/update-latest.test.ts`](tests/update-latest.test.ts)) and
-every test is `test.concurrent`, made safe by **dependency injection** rather than global
-mocking:
+The suite is one file ([`tests/update-latest.test.ts`](tests/update-latest.test.ts)):
 
-- Host effects (registry, writes, `bun install`, and terminal output) are injected as
-  per-test `mock()`s / a per-test capturing `Console` through the `HostIo` boundary.
-- `fetchLatest` takes an injectable `doFetch`; `main` takes explicit `argv` + `io` and
-  **returns** an exit code (the `import.meta.main` guard owns `process.exit`).
-- Filesystem tests build their own `mkdtemp` tree and read it back through real `Bun.Glob` /
-  `Bun.file` (unique paths are concurrency-safe).
+- **Pure-logic tests** are `test.concurrent` — they touch no process globals.
+- **Host-effect tests** mock the *specific real invocation* with `spyOn` at the global call site —
+  `spyOn(Bun, 'write')`, `spyOn(Bun, 'spawn')`, `spyOn(globalThis, 'fetch')`, `spyOn(console, …)`.
+  That's the only seam that intercepts Bun's built-in APIs (mocking the `bun` *module* via
+  `mock.module` does not). The spies are built by a factory (`installHostMocks`) and installed /
+  restored through a parent-`describe` `beforeEach`/`afterEach(mock.restore)` lifecycle; there's no
+  injected boundary. Because `spyOn` patches a process-global, these run serially (plain `test`).
+- Dynamic per-call behavior uses `mockResolvedValueOnce` chains (the `fetchLatest` tests),
+  `mockImplementation` (the URL-routed registry), and `mockReturnValue` (the install exit).
+- `Bun.spawn` is mocked to return a **real** `Bun.spawn(['true'])` / `['false']` subprocess, so the
+  install exit code is genuine without running `bun install`.
+- Filesystem reads stay real over each test's `mkdtemp` tree (built with `node:fs`, so setup never
+  hits the mocked `Bun.write`); assertions use Bun's deep-equality (`toEqual` / `toStrictEqual`).
 
-Because no test mutates a shared global, the suite passes under `bun test --parallel
---concurrent`. Keeping everything in one file also keeps `--parallel` a single worker so
-coverage merges into one accurate report.
+`main` **returns** an exit code (the `import.meta.main` guard owns `process.exit`), so it is
+callable from tests. Keeping everything in one file keeps coverage merged into one report.
 
 > The `coverage/` directory is intentionally committed (it is **not** git-ignored), so the
 > latest `lcov.info` and JUnit report travel with the repo.

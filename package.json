@@ -5,7 +5,7 @@
   "private": true,
   "scripts": {
     "lupdate": "bun run src/update-latest.ts",
-    "test": "bun test --parallel --concurrent",
+    "test": "bun test",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix"

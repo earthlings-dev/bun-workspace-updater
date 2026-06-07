@@ -1,16 +1,21 @@
-// Single test file. Every test is `test.concurrent` and touches NO shared process-global state:
-// host effects (network/writes/install) are injected as per-test `mock()`s through the `io` boundary,
-// terminal output is injected as a per-test capturing `Console` (so even output assertions touch no
-// global), `fetchLatest`'s network is injected as `doFetch`, `main` is called with explicit argv + io,
-// and each FS test gets its OWN `mkdtemp` dir. So the suite is safe under `bun test --parallel
-// --concurrent` (= `bun run test`) — no global `spyOn`, no `mock.module`, no `test.serial`. One file
-// keeps `--parallel` a single worker so coverage merges.
-import { describe, expect, mock, test } from 'bun:test';
-import { Console } from 'node:console';
-import { mkdtemp, rm } from 'node:fs/promises';
+// Single test file. Pure-logic tests are `test.concurrent` (they touch no process globals).
+//
+// Host effects are mocked at the MODULE boundary: `src` imports `{ fetch, spawn, write }` from the
+// `bun` module, and `tests/preload.ts` (bunfig `[test] preload`) registers `mock.module('bun', …)`
+// BEFORE the test files import `src` — `mock.module` won't update an already-imported module's
+// bindings, so it must run first. The shared mocks live in `preload.ts`; this file imports and
+// configures them per test. `console.*` is spied directly (`spyOn(console, …)`); reads use the global
+// `Bun.file`/`Bun.Glob` and stay real (unmocked). The mocks are installed/reset through a
+// parent-`describe` `beforeEach`/`afterEach(mock.restore)` lifecycle, with dynamic per-call behavior
+// (`mockResolvedValueOnce` for sequential calls, `mockImplementation` for the URL-routed registry).
+// Because the mocks are process-global, host-effect tests are serial; the `test` script is plain
+// `bun test`. Assertions use Bun's deep-equality (`toEqual`/`toStrictEqual`) and the asymmetric
+// `stringContaining`/`objectContaining` matchers; rejections go through `rejectsWith` (Bun types
+// `expect().rejects.toThrow()` as `void`, so it can't be awaited cleanly).
+import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from 'bun:test';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
-import { Writable } from 'node:stream';
+import { dirname, join, resolve } from 'node:path';
 
 import ts from 'typescript';
 
@@ -42,16 +47,19 @@ import {
   type Edit,
   type Options,
 } from '../src/update-latest';
+import { fetchMock, spawnMock, writeMock } from './preload';
 
-// ---------------------------------------------------------------------------
-// Helpers (all per-test; no shared mutable state)
-// ---------------------------------------------------------------------------
+// Real subprocesses via the GLOBAL `Bun.spawn` (mock.module only replaces the `bun` MODULE, not the
+// global namespace), reused as the mocked `spawn`'s return value so the install path yields a genuine
+// awaited exit code with no real `bun install`: `true` → 0, `false` → 1.
+const PROC_OK = Bun.spawn(['true']);
+const PROC_FAIL = Bun.spawn(['false']);
 
 function parse(text: string): ts.JsonSourceFile {
   return ts.parseJsonText('test.json', text);
 }
 
-/** Create an isolated temp tree, run `fn` against it, and always clean up. Returns `fn`'s result. */
+/** Create an isolated temp tree (built with `node:fs`, so it never hits the mocked `bun` `write`). */
 async function withTree<T>(
   files: Readonly<Record<string, string>>,
   fn: (dir: string) => Promise<T>,
@@ -59,60 +67,15 @@ async function withTree<T>(
   const dir = await mkdtemp(join(tmpdir(), 'wsu-'));
   try {
     for (const [rel, content] of Object.entries(files)) {
-      await Bun.write(join(dir, rel), content);
+      const abs = join(dir, rel);
+      await mkdir(dirname(abs), { recursive: true });
+      await writeFile(abs, content);
     }
     return await fn(dir);
   }
   finally {
     await rm(dir, { recursive: true, force: true });
   }
-}
-
-/** A `Writable` that appends every chunk to `sink` — a per-test, in-memory capture (no real stream). */
-function capturingStream(sink: string[]): Writable {
-  return new Writable({
-    write(chunk: Buffer | string, _encoding: BufferEncoding, callback: (error?: Error | null) => void): void {
-      sink.push(typeof chunk === 'string' ? chunk : chunk.toString('utf8'));
-      callback();
-    },
-  });
-}
-
-/**
- * A per-test injected `HostIo`: deterministic registry, no-op write, fake install, and a REAL
- * captured `Console` (`new Console` over capturing streams). All collaborators are local to the call
- * — nothing global is spied — so the suite stays `--concurrent`/`--parallel` safe AND no CLI line
- * ever leaks to the real terminal. `stdout()`/`stderr()` return the captured text so tests assert
- * printed output by stream (log/info → stdout; warn/error → stderr) without touching a global.
- */
-function makeIo(
-  versions: Readonly<Record<string, string>>,
-  options: { readonly failOn?: ReadonlySet<string>; readonly installExit?: number } = {},
-) {
-  const failOn = options.failOn ?? new Set<string>();
-  const fetchLatest = mock(async (pkg: string): Promise<string> => {
-    if (failOn.has(pkg)) {
-      throw new Error(`GET https://registry.npmjs.org/${pkg}/latest → 404 Not Found`);
-    }
-    const v = versions[pkg];
-    if (v === undefined) {
-      throw new Error(`No version field on ${pkg}`);
-    }
-    return v;
-  });
-  const write = mock(async () => 0);
-  const spawn = mock(() => ({ exited: Promise.resolve(options.installExit ?? 0) }));
-  const out: string[] = [];
-  const err: string[] = [];
-  const console = new Console({ stdout: capturingStream(out), stderr: capturingStream(err) });
-  return {
-    fetchLatest,
-    write,
-    spawn,
-    console,
-    stdout: (): string => out.join(''),
-    stderr: (): string => err.join(''),
-  };
 }
 
 function opts(over: Partial<Options>): Options {
@@ -127,6 +90,59 @@ function opts(over: Partial<Options>): Options {
     toCatalog: false,
     ...over,
   };
+}
+
+/** Assert `promise` rejects with an `Error` whose message contains `substring` (typed; no `as`). */
+async function rejectsWith(promise: Promise<unknown>, substring: string): Promise<void> {
+  let caught: unknown;
+  try {
+    await promise;
+  }
+  catch (error) {
+    caught = error;
+  }
+  expect(caught).toBeInstanceOf(Error);
+  if (caught instanceof Error) {
+    expect(caught.message).toContain(substring);
+  }
+}
+
+// --- response factories ---
+const okResponse = (version: string): Response => Response.json({ version });
+const notFound = (): Response => new Response('not found', { status: 404, statusText: 'Not Found' });
+
+/** A `fetch` implementation that answers from a version map (package `%2F`-decoded from the URL). */
+function registryFrom(versions: Readonly<Record<string, string>>, failOn: readonly string[] = []) {
+  const fail = new Set(failOn);
+  return async (input: string): Promise<Response> => {
+    await Promise.resolve();
+    const path = input.slice('https://registry.npmjs.org/'.length);
+    const pkg = decodeURIComponent(path.slice(0, path.lastIndexOf('/')));
+    if (fail.has(pkg)) {
+      return notFound();
+    }
+    const version = versions[pkg];
+    return version === undefined ? new Response('{}', { status: 200 }) : okResponse(version);
+  };
+}
+
+/**
+ * Configure the preloaded `bun`-module mocks (`fetch`/`write`/`spawn` from `./preload`) plus `console`
+ * spies for one test, returning the handles so tests set behaviour (`fetch.mockImplementation(...)`)
+ * and assert on them. The `mock.module('bun', …)` registration itself lives in `tests/preload.ts`.
+ */
+function installHostMocks() {
+  writeMock.mockResolvedValue(0);
+  spawnMock.mockReturnValue(PROC_OK);
+
+  const log = spyOn(console, 'log');
+  log.mockImplementation(() => undefined);
+  const warn = spyOn(console, 'warn');
+  warn.mockImplementation(() => undefined);
+  const error = spyOn(console, 'error');
+  error.mockImplementation(() => undefined);
+
+  return { fetch: fetchMock, write: writeMock, spawn: spawnMock, log, warn, error };
 }
 
 // ---------------------------------------------------------------------------
@@ -572,56 +588,73 @@ describe('unifyPrefix', () => {
 
 describe('mapConcurrent', () => {
   test.concurrent('maps with a concurrency limit, preserving order', async () => {
-    expect(await mapConcurrent([1, 2, 3, 4], 2, async n => n * 10)).toEqual([10, 20, 30, 40]);
-    expect(await mapConcurrent([5], 10, async n => n + 1)).toEqual([6]);
-    expect(await mapConcurrent<number, number>([], 5, async n => n)).toEqual([]);
+    expect(await mapConcurrent([1, 2, 3, 4], 2, async (n) => {
+      await Promise.resolve();
+      return n * 10;
+    })).toEqual([10, 20, 30, 40]);
+    expect(await mapConcurrent([5], 10, async (n) => {
+      await Promise.resolve();
+      return n + 1;
+    })).toEqual([6]);
+    expect(await mapConcurrent<number, number>([], 5, async (n) => {
+      await Promise.resolve();
+      return n;
+    })).toEqual([]);
   });
 });
 
 // ---------------------------------------------------------------------------
-// fetchLatest (real fn, injected `doFetch`)
+// Host effects — `bun` module mocked via `mock.module`, `console` via spyOn, installed/torn down
+// through this parent describe's lifecycle hooks. These tests are serial (process-wide mock state).
 // ---------------------------------------------------------------------------
 
-describe('fetchLatest', () => {
-  test.concurrent('200 returns version and encodes scoped names with %2F', async () => {
-    let seen = '';
-    const doFetch = mock(async (input: unknown): Promise<Response> => {
-      seen = String(input);
-      return new Response(JSON.stringify({ version: '9.9.9' }), { status: 200 });
+describe('host effects', () => {
+  let h!: ReturnType<typeof installHostMocks>;
+  beforeEach(() => {
+    h = installHostMocks();
+  });
+  afterEach(() => {
+    mock.restore();
+  });
+
+  // -------------------------------------------------------------------------
+  // fetchLatest (real fn; the `bun` `fetch` it calls is mocked, dynamic per-call)
+  // -------------------------------------------------------------------------
+
+  describe('fetchLatest', () => {
+    test('200 returns version and encodes scoped names with %2F', async () => {
+      h.fetch.mockResolvedValueOnce(okResponse('9.9.9'));
+      expect(await fetchLatest('@scope/pkg', 'next')).toBe('9.9.9');
+      expect(h.fetch).toHaveBeenCalledWith(
+        'https://registry.npmjs.org/@scope%2Fpkg/next',
+        { headers: { accept: 'application/json' } },
+      );
     });
-    expect(await fetchLatest('@scope/pkg', 'next', doFetch)).toBe('9.9.9');
-    expect(seen).toContain('@scope%2Fpkg');
-    expect(seen).toContain('/next');
+
+    test('404 throws with status', async () => {
+      h.fetch.mockResolvedValueOnce(notFound());
+      await rejectsWith(fetchLatest('nope', 'latest'), '404');
+    });
+
+    test('rejects bodies without a string version (dynamic per-call queue)', async () => {
+      h.fetch
+        .mockResolvedValueOnce(new Response('{}', { status: 200 }))
+        .mockResolvedValueOnce(Response.json({ version: 123 }))
+        .mockResolvedValueOnce(new Response('null', { status: 200 }))
+        .mockResolvedValueOnce(new Response('"juststring"', { status: 200 }));
+      await rejectsWith(fetchLatest('a', 'latest'), 'No version');
+      await rejectsWith(fetchLatest('b', 'latest'), 'No version');
+      await rejectsWith(fetchLatest('c', 'latest'), 'No version');
+      await rejectsWith(fetchLatest('d', 'latest'), 'No version');
+    });
   });
 
-  test.concurrent('404 throws with status', async () => {
-    const doFetch = mock(async (): Promise<Response> => new Response('x', { status: 404, statusText: 'Not Found' }));
-    await expect(fetchLatest('nope', 'latest', doFetch)).rejects.toThrow('404');
-  });
+  // -------------------------------------------------------------------------
+  // run — normal update path
+  // -------------------------------------------------------------------------
 
-  test.concurrent('rejects bodies without a string version', async () => {
-    const noField = mock(async (): Promise<Response> => new Response('{}', { status: 200 }));
-    await expect(fetchLatest('a', 'latest', noField)).rejects.toThrow('No version');
-
-    const numberVersion = mock(
-      async (): Promise<Response> => new Response(JSON.stringify({ version: 123 }), { status: 200 }),
-    );
-    await expect(fetchLatest('b', 'latest', numberVersion)).rejects.toThrow('No version');
-
-    const nullBody = mock(async (): Promise<Response> => new Response('null', { status: 200 }));
-    await expect(fetchLatest('c', 'latest', nullBody)).rejects.toThrow('No version');
-
-    const stringBody = mock(async (): Promise<Response> => new Response('"juststring"', { status: 200 }));
-    await expect(fetchLatest('d', 'latest', stringBody)).rejects.toThrow('No version');
-  });
-});
-
-// ---------------------------------------------------------------------------
-// run — normal update path
-// ---------------------------------------------------------------------------
-
-describe('run (update)', () => {
-  const ROOT = `{
+  describe('run (update)', () => {
+    const ROOT = `{
   "name": "@it/root",
   "workspaces": [
     "packages/*"
@@ -631,7 +664,7 @@ describe('run (update)', () => {
     "already": "^9.9.9"
   }
 }`;
-  const A = `{
+    const A = `{
   "name": "@it/a",
   "dependencies": {
     "eslint": "^8.0.0",
@@ -641,121 +674,119 @@ describe('run (update)', () => {
     "stay": "latest"
   }
 }`;
-  const B = `{
+    const B = `{
   "name": "@it/b",
   "dependencies": {
     "eslint": "^8.0.0",
     "broken-pkg": "^1.0.0"
   }
 }`;
-  const TREE = { 'package.json': ROOT, 'packages/a/package.json': A, 'packages/b/package.json': B };
-  const VERSIONS = { typescript: '9.9.9', already: '9.9.9', eslint: '9.9.9' };
+    const TREE = { 'package.json': ROOT, 'packages/a/package.json': A, 'packages/b/package.json': B };
+    const VERSIONS = { typescript: '9.9.9', already: '9.9.9', eslint: '9.9.9' };
 
-  test.concurrent('recursively bumps members, dedupes fetches, skips internal/protocol/sentinel', async () => {
-    await withTree(TREE, async (dir) => {
-      const io = makeIo(VERSIONS, { failOn: new Set(['broken-pkg']) });
-      const res = await run(opts({ file: join(dir, 'package.json') }), io);
+    test('recursively bumps members, dedupes fetches, skips internal/protocol/sentinel', async () => {
+      await withTree(TREE, async (dir) => {
+        h.fetch.mockImplementation(registryFrom(VERSIONS, ['broken-pkg']));
+        const res = await run(opts({ file: join(dir, 'package.json') }));
 
-      expect(res.changed).toBe(3); // typescript + eslint(a) + eslint(b)
-      expect(res.skipped).toBe(1); // already @ ^9.9.9
-      expect(res.failed).toBe(1); // broken-pkg
-      expect(res.filesWritten).toHaveLength(3);
-      expect(res.installExitCode).toBeNull();
-      expect(res.warnings).toHaveLength(1);
-      expect(res.warnings[0]).toContain('broken-pkg');
+        expect(res.changed).toBe(3); // typescript + eslint(a) + eslint(b)
+        expect(res.skipped).toBe(1); // already @ ^9.9.9
+        expect(res.failed).toBe(1); // broken-pkg
+        expect(res.filesWritten).toHaveLength(3);
+        expect(res.installExitCode).toBeNull();
+        expect(res.warnings).toHaveLength(1);
+        expect(res.warnings[0]).toContain('broken-pkg');
 
-      // unique packages only: typescript, already, eslint, broken-pkg (eslint deduped across 2 files)
-      expect(io.fetchLatest).toHaveBeenCalledTimes(4);
-      expect(io.write).toHaveBeenCalledTimes(3);
-      expect(io.spawn).not.toHaveBeenCalled();
+        // unique packages only: typescript, already, eslint, broken-pkg (eslint deduped across 2 files)
+        expect(h.fetch).toHaveBeenCalledTimes(4);
+        expect(h.write).toHaveBeenCalledTimes(3);
+        expect(h.spawn).not.toHaveBeenCalled();
 
-      const aWrite = io.write.mock.calls.find(c => c[0] === join(dir, 'packages/a/package.json'));
-      const aText = String(aWrite?.[1]);
-      expect(aText).toContain('"eslint": "^9.9.9"');
-      expect(aText).toContain('"@it/b": "^1.0.0"'); // internal member ref left intact
-      expect(aText).toContain('"left-pad": "catalog:"');
-      expect(aText).toContain('"react": "workspace:*"');
-      expect(aText).toContain('"stay": "latest"');
+        const aPath = join(dir, 'packages/a/package.json');
+        expect(h.write).toHaveBeenCalledWith(aPath, expect.stringContaining('"eslint": "^9.9.9"'));
+        expect(h.write).toHaveBeenCalledWith(aPath, expect.stringContaining('"@it/b": "^1.0.0"'));
+        expect(h.write).toHaveBeenCalledWith(aPath, expect.stringContaining('"left-pad": "catalog:"'));
+        expect(h.write).toHaveBeenCalledWith(aPath, expect.stringContaining('"react": "workspace:*"'));
+        expect(h.write).toHaveBeenCalledWith(aPath, expect.stringContaining('"stay": "latest"'));
+      });
+    });
+
+    test('--dry-run writes nothing and never spawns install', async () => {
+      await withTree(TREE, async (dir) => {
+        h.fetch.mockImplementation(registryFrom(VERSIONS, ['broken-pkg']));
+        const res = await run(opts({ file: join(dir, 'package.json'), dryRun: true }));
+        expect(res.changed).toBe(3);
+        expect(res.filesWritten).toEqual([]);
+        expect(h.write).not.toHaveBeenCalled();
+        expect(h.spawn).not.toHaveBeenCalled();
+      });
+    });
+
+    test('runs a single install at the root when changes are written', async () => {
+      await withTree(TREE, async (dir) => {
+        h.fetch.mockImplementation(registryFrom(VERSIONS, ['broken-pkg']));
+        const res = await run(opts({ file: join(dir, 'package.json'), install: true }));
+        expect(h.spawn).toHaveBeenCalledTimes(1);
+        expect(h.spawn).toHaveBeenCalledWith(['bun', 'install'], expect.objectContaining({ cwd: dir }));
+        expect(res.installExitCode).toBe(0);
+      });
+    });
+
+    test('a non-zero install exit is surfaced as installExitCode', async () => {
+      await withTree(TREE, async (dir) => {
+        h.fetch.mockImplementation(registryFrom(VERSIONS, ['broken-pkg']));
+        h.spawn.mockReturnValue(PROC_FAIL);
+        const res = await run(opts({ file: join(dir, 'package.json'), install: true }));
+        expect(h.spawn).toHaveBeenCalledTimes(1);
+        expect(res.installExitCode).toBe(1);
+      });
+    });
+
+    test('--only filters which packages are fetched and bumped', async () => {
+      await withTree(
+        { 'package.json': '{ "name": "x", "devDependencies": { "typescript": "^5.0.0", "eslint": "^8.0.0" } }' },
+        async (dir) => {
+          h.fetch.mockImplementation(registryFrom({ typescript: '9.9.9', eslint: '9.9.9' }));
+          const res = await run(
+            opts({ file: join(dir, 'package.json'), recursive: false, only: /typescript/ }),
+          );
+          expect(res.changed).toBe(1);
+          expect(h.fetch).toHaveBeenCalledTimes(1);
+        },
+      );
+    });
+
+    test('reports nothing to do when no bumpable entries exist', async () => {
+      await withTree(
+        { 'package.json': '{ "name": "solo", "dependencies": { "a": "workspace:*", "b": "catalog:" } }' },
+        async (dir) => {
+          const res = await run(opts({ file: join(dir, 'package.json'), recursive: false }));
+          expect(res).toStrictEqual({
+            changed: 0,
+            skipped: 0,
+            failed: 0,
+            filesWritten: [],
+            installExitCode: null,
+            warnings: [],
+          });
+          expect(h.fetch).not.toHaveBeenCalled();
+        },
+      );
     });
   });
 
-  test.concurrent('--dry-run writes nothing and never spawns install', async () => {
-    await withTree(TREE, async (dir) => {
-      const io = makeIo(VERSIONS, { failOn: new Set(['broken-pkg']) });
-      const res = await run(opts({ file: join(dir, 'package.json'), dryRun: true }), io);
-      expect(res.changed).toBe(3);
-      expect(res.filesWritten).toEqual([]);
-      expect(io.write).not.toHaveBeenCalled();
-      expect(io.spawn).not.toHaveBeenCalled();
-    });
-  });
+  // -------------------------------------------------------------------------
+  // run — --to-catalog migration path
+  // -------------------------------------------------------------------------
 
-  test.concurrent('runs a single install at the root when changes are written', async () => {
-    await withTree(TREE, async (dir) => {
-      const io = makeIo(VERSIONS, { failOn: new Set(['broken-pkg']) });
-      const res = await run(opts({ file: join(dir, 'package.json'), install: true }), io);
-      expect(io.spawn).toHaveBeenCalledTimes(1);
-      expect(io.spawn.mock.calls[0]?.[0]).toEqual(['bun', 'install']);
-      expect(io.spawn.mock.calls[0]?.[1]?.cwd).toBe(dir);
-      expect(res.installExitCode).toBe(0);
-    });
-  });
-
-  test.concurrent('a non-zero install exit is surfaced as installExitCode', async () => {
-    await withTree(TREE, async (dir) => {
-      const io = makeIo(VERSIONS, { failOn: new Set(['broken-pkg']), installExit: 1 });
-      const res = await run(opts({ file: join(dir, 'package.json'), install: true }), io);
-      expect(res.installExitCode).toBe(1);
-    });
-  });
-
-  test.concurrent('--only filters which packages are fetched and bumped', async () => {
-    await withTree(
-      { 'package.json': '{ "name": "x", "devDependencies": { "typescript": "^5.0.0", "eslint": "^8.0.0" } }' },
-      async (dir) => {
-        const io = makeIo({ typescript: '9.9.9', eslint: '9.9.9' });
-        const res = await run(
-          opts({ file: join(dir, 'package.json'), recursive: false, only: /typescript/ }),
-          io,
-        );
-        expect(res.changed).toBe(1);
-        expect(io.fetchLatest).toHaveBeenCalledTimes(1);
-      },
-    );
-  });
-
-  test.concurrent('reports nothing to do when no bumpable entries exist', async () => {
-    await withTree(
-      { 'package.json': '{ "name": "solo", "dependencies": { "a": "workspace:*", "b": "catalog:" } }' },
-      async (dir) => {
-        const io = makeIo({});
-        const res = await run(opts({ file: join(dir, 'package.json'), recursive: false }), io);
-        expect(res).toEqual({
-          changed: 0,
-          skipped: 0,
-          failed: 0,
-          filesWritten: [],
-          installExitCode: null,
-          warnings: [],
-        });
-        expect(io.fetchLatest).not.toHaveBeenCalled();
-      },
-    );
-  });
-});
-
-// ---------------------------------------------------------------------------
-// run — --to-catalog migration path
-// ---------------------------------------------------------------------------
-
-describe('run (--to-catalog)', () => {
-  const ARRAY_ROOT = `{
+  describe('run (--to-catalog)', () => {
+    const ARRAY_ROOT = `{
   "name": "@cat/root",
   "workspaces": [
     "packages/*"
   ]
 }`;
-  const A = `{
+    const A = `{
   "name": "@cat/a",
   "dependencies": {
     "eslint": "^8.0.0",
@@ -763,28 +794,27 @@ describe('run (--to-catalog)', () => {
     "@cat/b": "workspace:*"
   }
 }`;
-  const B = `{
+    const B = `{
   "name": "@cat/b",
   "dependencies": {
     "eslint": "^9.0.0",
     "lodash": "~4.0.0"
   }
 }`;
-  const TREE = { 'package.json': ARRAY_ROOT, 'packages/a/package.json': A, 'packages/b/package.json': B };
-  const VERSIONS = { eslint: '9.9.9', typescript: '9.9.9', lodash: '9.9.9' };
+    const TREE = { 'package.json': ARRAY_ROOT, 'packages/a/package.json': A, 'packages/b/package.json': B };
+    const VERSIONS = { eslint: '9.9.9', typescript: '9.9.9', lodash: '9.9.9' };
 
-  test.concurrent('array-form: rewrites workspaces to a sorted catalog, unifies conflicts, rewrites members', async () => {
-    await withTree(TREE, async (dir) => {
-      const io = makeIo(VERSIONS);
-      const res = await run(opts({ file: join(dir, 'package.json'), toCatalog: true }), io);
+    test('array-form: rewrites workspaces to a sorted catalog, unifies conflicts, rewrites members', async () => {
+      await withTree(TREE, async (dir) => {
+        h.fetch.mockImplementation(registryFrom(VERSIONS));
+        const res = await run(opts({ file: join(dir, 'package.json'), toCatalog: true }));
 
-      expect(res.changed).toBe(4); // eslint x2 + typescript + lodash
-      expect(res.failed).toBe(0);
-      expect(res.warnings).toHaveLength(1); // eslint ^8 | ^9 conflict
-      expect(res.warnings[0]).toContain('eslint');
+        expect(res.changed).toBe(4); // eslint x2 + typescript + lodash
+        expect(res.failed).toBe(0);
+        expect(res.warnings).toHaveLength(1); // eslint ^8 | ^9 conflict
+        expect(res.warnings[0]).toContain('eslint');
 
-      const rootText = String(io.write.mock.calls.find(c => c[0] === join(dir, 'package.json'))?.[1]);
-      expect(rootText).toBe(`{
+        expect(h.write).toHaveBeenCalledWith(join(dir, 'package.json'), `{
   "name": "@cat/root",
   "workspaces": {
     "packages": [
@@ -798,54 +828,53 @@ describe('run (--to-catalog)', () => {
   }
 }`);
 
-      const aText = String(io.write.mock.calls.find(c => c[0] === join(dir, 'packages/a/package.json'))?.[1]);
-      expect(aText).toContain('"eslint": "catalog:"');
-      expect(aText).toContain('"typescript": "catalog:"');
-      expect(aText).toContain('"@cat/b": "workspace:*"');
+        const aPath = join(dir, 'packages/a/package.json');
+        expect(h.write).toHaveBeenCalledWith(aPath, expect.stringContaining('"eslint": "catalog:"'));
+        expect(h.write).toHaveBeenCalledWith(aPath, expect.stringContaining('"typescript": "catalog:"'));
+        expect(h.write).toHaveBeenCalledWith(aPath, expect.stringContaining('"@cat/b": "workspace:*"'));
 
-      const bText = String(io.write.mock.calls.find(c => c[0] === join(dir, 'packages/b/package.json'))?.[1]);
-      expect(bText).toContain('"eslint": "catalog:"');
-      expect(bText).toContain('"lodash": "catalog:"');
+        const bPath = join(dir, 'packages/b/package.json');
+        expect(h.write).toHaveBeenCalledWith(bPath, expect.stringContaining('"eslint": "catalog:"'));
+        expect(h.write).toHaveBeenCalledWith(bPath, expect.stringContaining('"lodash": "catalog:"'));
+      });
     });
-  });
 
-  test.concurrent('--dry-run writes nothing', async () => {
-    await withTree(TREE, async (dir) => {
-      const io = makeIo(VERSIONS);
-      const res = await run(opts({ file: join(dir, 'package.json'), toCatalog: true, dryRun: true }), io);
-      expect(res.changed).toBe(4);
-      expect(io.write).not.toHaveBeenCalled();
+    test('--dry-run writes nothing', async () => {
+      await withTree(TREE, async (dir) => {
+        h.fetch.mockImplementation(registryFrom(VERSIONS));
+        const res = await run(opts({ file: join(dir, 'package.json'), toCatalog: true, dryRun: true }));
+        expect(res.changed).toBe(4);
+        expect(h.write).not.toHaveBeenCalled();
+      });
     });
-  });
 
-  test.concurrent('a fetch failure leaves that dependency untouched and uncatalogued', async () => {
-    await withTree(
-      {
-        'package.json': ARRAY_ROOT,
-        'packages/a/package.json': '{ "name": "@cat/a", "dependencies": { "good": "^1.0.0", "bad": "^1.0.0" } }',
-      },
-      async (dir) => {
-        const io = makeIo({ good: '9.9.9' }, { failOn: new Set(['bad']) });
-        const res = await run(opts({ file: join(dir, 'package.json'), toCatalog: true }), io);
+    test('a fetch failure leaves that dependency untouched and uncatalogued', async () => {
+      await withTree(
+        {
+          'package.json': ARRAY_ROOT,
+          'packages/a/package.json': '{ "name": "@cat/a", "dependencies": { "good": "^1.0.0", "bad": "^1.0.0" } }',
+        },
+        async (dir) => {
+          h.fetch.mockImplementation(registryFrom({ good: '9.9.9' }, ['bad']));
+          const res = await run(opts({ file: join(dir, 'package.json'), toCatalog: true }));
 
-        expect(res.failed).toBe(1);
-        expect(res.changed).toBe(1);
-        expect(res.warnings.some(w => w.includes('bad'))).toBe(true);
+          expect(res.failed).toBe(1);
+          expect(res.changed).toBe(1);
+          expect(res.warnings.some(w => w.includes('bad'))).toBe(true);
 
-        const rootText = String(io.write.mock.calls.find(c => c[0] === join(dir, 'package.json'))?.[1]);
-        expect(rootText).toContain('"good": "^9.9.9"');
-        expect(rootText).not.toContain('"bad"');
-        const aText = String(io.write.mock.calls.find(c => c[0] === join(dir, 'packages/a/package.json'))?.[1]);
-        expect(aText).toContain('"good": "catalog:"');
-        expect(aText).toContain('"bad": "^1.0.0"');
-      },
-    );
-  });
+          expect(h.write).toHaveBeenCalledWith(join(dir, 'package.json'), expect.stringContaining('"good": "^9.9.9"'));
+          expect(h.write).not.toHaveBeenCalledWith(join(dir, 'package.json'), expect.stringContaining('"bad"'));
+          const aPath = join(dir, 'packages/a/package.json');
+          expect(h.write).toHaveBeenCalledWith(aPath, expect.stringContaining('"good": "catalog:"'));
+          expect(h.write).toHaveBeenCalledWith(aPath, expect.stringContaining('"bad": "^1.0.0"'));
+        },
+      );
+    });
 
-  test.concurrent('object-form without a catalog inserts one', async () => {
-    await withTree(
-      {
-        'package.json': `{
+    test('object-form without a catalog inserts one', async () => {
+      await withTree(
+        {
+          'package.json': `{
   "name": "@cat/root",
   "workspaces": {
     "packages": [
@@ -853,23 +882,23 @@ describe('run (--to-catalog)', () => {
     ]
   }
 }`,
-        'packages/a/package.json': '{ "name": "@cat/a", "dependencies": { "lodash": "^4.0.0" } }',
-      },
-      async (dir) => {
-        const io = makeIo({ lodash: '9.9.9' });
-        await run(opts({ file: join(dir, 'package.json'), toCatalog: true }), io);
-        const rootText = String(io.write.mock.calls.find(c => c[0] === join(dir, 'package.json'))?.[1]);
-        expect(rootText).toContain('"catalog": {');
-        expect(rootText).toContain('"lodash": "^9.9.9"');
-        expect(rootText).toContain('"packages": [');
-      },
-    );
-  });
+          'packages/a/package.json': '{ "name": "@cat/a", "dependencies": { "lodash": "^4.0.0" } }',
+        },
+        async (dir) => {
+          h.fetch.mockImplementation(registryFrom({ lodash: '9.9.9' }));
+          await run(opts({ file: join(dir, 'package.json'), toCatalog: true }));
+          const rootPath = join(dir, 'package.json');
+          expect(h.write).toHaveBeenCalledWith(rootPath, expect.stringContaining('"catalog": {'));
+          expect(h.write).toHaveBeenCalledWith(rootPath, expect.stringContaining('"lodash": "^9.9.9"'));
+          expect(h.write).toHaveBeenCalledWith(rootPath, expect.stringContaining('"packages": ['));
+        },
+      );
+    });
 
-  test.concurrent('object-form with an existing catalog merges only missing entries', async () => {
-    await withTree(
-      {
-        'package.json': `{
+    test('object-form with an existing catalog merges only missing entries', async () => {
+      await withTree(
+        {
+          'package.json': `{
   "name": "@cat/root",
   "workspaces": {
     "packages": [
@@ -880,265 +909,261 @@ describe('run (--to-catalog)', () => {
     }
   }
 }`,
-        'packages/a/package.json': '{ "name": "@cat/a", "dependencies": { "eslint": "catalog:", "lodash": "^4.0.0" } }',
-      },
-      async (dir) => {
-        const io = makeIo({ lodash: '9.9.9' });
-        const res = await run(opts({ file: join(dir, 'package.json'), toCatalog: true }), io);
-        expect(res.changed).toBe(1);
-        const rootText = String(io.write.mock.calls.find(c => c[0] === join(dir, 'package.json'))?.[1]);
-        expect(rootText).toContain('"eslint": "^9.9.9"');
-        expect(rootText).toContain('"lodash": "^9.9.9"');
-      },
-    );
-  });
+          'packages/a/package.json': '{ "name": "@cat/a", "dependencies": { "eslint": "catalog:", "lodash": "^4.0.0" } }',
+        },
+        async (dir) => {
+          h.fetch.mockImplementation(registryFrom({ lodash: '9.9.9' }));
+          const res = await run(opts({ file: join(dir, 'package.json'), toCatalog: true }));
+          expect(res.changed).toBe(1);
+          const rootPath = join(dir, 'package.json');
+          expect(h.write).toHaveBeenCalledWith(rootPath, expect.stringContaining('"eslint": "^9.9.9"'));
+          expect(h.write).toHaveBeenCalledWith(rootPath, expect.stringContaining('"lodash": "^9.9.9"'));
+        },
+      );
+    });
 
-  test.concurrent('object-form with an empty catalog populates it', async () => {
-    await withTree(
-      {
-        'package.json': '{ "name": "@cat/root", "workspaces": { "packages": ["packages/*"], "catalog": {} } }',
-        'packages/a/package.json': '{ "name": "@cat/a", "dependencies": { "lodash": "^4.0.0" } }',
-      },
-      async (dir) => {
-        const io = makeIo({ lodash: '9.9.9' });
-        await run(opts({ file: join(dir, 'package.json'), toCatalog: true }), io);
-        const rootText = String(io.write.mock.calls.find(c => c[0] === join(dir, 'package.json'))?.[1]);
-        expect(rootText).toContain('"lodash": "^9.9.9"');
-      },
-    );
-  });
+    test('object-form with an empty catalog populates it', async () => {
+      await withTree(
+        {
+          'package.json': '{ "name": "@cat/root", "workspaces": { "packages": ["packages/*"], "catalog": {} } }',
+          'packages/a/package.json': '{ "name": "@cat/a", "dependencies": { "lodash": "^4.0.0" } }',
+        },
+        async (dir) => {
+          h.fetch.mockImplementation(registryFrom({ lodash: '9.9.9' }));
+          await run(opts({ file: join(dir, 'package.json'), toCatalog: true }));
+          expect(h.write).toHaveBeenCalledWith(join(dir, 'package.json'), expect.stringContaining('"lodash": "^9.9.9"'));
+        },
+      );
+    });
 
-  test.concurrent('does not duplicate a catalog entry that already exists', async () => {
-    await withTree(
-      {
-        'package.json': `{
+    test('does not duplicate a catalog entry that already exists', async () => {
+      await withTree(
+        {
+          'package.json': `{
   "name": "@cat/root",
   "workspaces": {
     "packages": ["packages/*"],
     "catalog": { "lodash": "^9.9.9" }
   }
 }`,
-        'packages/a/package.json': '{ "name": "@cat/a", "dependencies": { "lodash": "^4.0.0" } }',
-      },
-      async (dir) => {
-        const io = makeIo({ lodash: '9.9.9' });
-        const res = await run(opts({ file: join(dir, 'package.json'), toCatalog: true }), io);
-        expect(res.changed).toBe(1); // member lodash normalized to catalog:
-        expect(io.write.mock.calls.find(c => c[0] === join(dir, 'package.json'))).toBeUndefined();
-        const aText = String(io.write.mock.calls.find(c => c[0] === join(dir, 'packages/a/package.json'))?.[1]);
-        expect(aText).toContain('"lodash": "catalog:"');
-      },
-    );
-  });
+          'packages/a/package.json': '{ "name": "@cat/a", "dependencies": { "lodash": "^4.0.0" } }',
+        },
+        async (dir) => {
+          h.fetch.mockImplementation(registryFrom({ lodash: '9.9.9' }));
+          const res = await run(opts({ file: join(dir, 'package.json'), toCatalog: true }));
+          expect(res.changed).toBe(1); // member lodash normalized to catalog:
+          expect(h.write).toHaveBeenCalledTimes(1); // root already has the entry → only the member is written
+          expect(h.write).toHaveBeenCalledWith(
+            join(dir, 'packages/a/package.json'),
+            expect.stringContaining('"lodash": "catalog:"'),
+          );
+        },
+      );
+    });
 
-  test.concurrent('runs a single install at the root after migrating when --install is set', async () => {
-    await withTree(
-      {
-        'package.json': ARRAY_ROOT,
-        'packages/a/package.json': '{ "name": "@cat/a", "dependencies": { "lodash": "^4.0.0" } }',
-      },
-      async (dir) => {
-        const io = makeIo({ lodash: '9.9.9' });
-        await run(opts({ file: join(dir, 'package.json'), toCatalog: true, install: true }), io);
-        expect(io.spawn).toHaveBeenCalledTimes(1);
-        expect(io.spawn.mock.calls[0]?.[0]).toEqual(['bun', 'install']);
-        expect(io.spawn.mock.calls[0]?.[1]?.cwd).toBe(dir);
-      },
-    );
-  });
+    test('runs a single install at the root after migrating when --install is set', async () => {
+      await withTree(
+        {
+          'package.json': ARRAY_ROOT,
+          'packages/a/package.json': '{ "name": "@cat/a", "dependencies": { "lodash": "^4.0.0" } }',
+        },
+        async (dir) => {
+          h.fetch.mockImplementation(registryFrom({ lodash: '9.9.9' }));
+          await run(opts({ file: join(dir, 'package.json'), toCatalog: true, install: true }));
+          expect(h.spawn).toHaveBeenCalledTimes(1);
+          expect(h.spawn).toHaveBeenCalledWith(['bun', 'install'], expect.objectContaining({ cwd: dir }));
+        },
+      );
+    });
 
-  test.concurrent('is idempotent: an already-catalogued workspace is a no-op', async () => {
-    await withTree(
-      {
-        'package.json': `{
+    test('is idempotent: an already-catalogued workspace is a no-op', async () => {
+      await withTree(
+        {
+          'package.json': `{
   "name": "@cat/root",
   "workspaces": {
     "packages": ["packages/*"],
     "catalog": { "eslint": "^9.9.9" }
   }
 }`,
-        'packages/a/package.json': '{ "name": "@cat/a", "dependencies": { "eslint": "catalog:" } }',
-      },
-      async (dir) => {
-        const io = makeIo({});
-        const res = await run(opts({ file: join(dir, 'package.json'), toCatalog: true }), io);
-        expect(res.changed).toBe(0);
-        expect(io.write).not.toHaveBeenCalled();
-        expect(io.fetchLatest).not.toHaveBeenCalled();
-      },
-    );
-  });
+          'packages/a/package.json': '{ "name": "@cat/a", "dependencies": { "eslint": "catalog:" } }',
+        },
+        async (dir) => {
+          const res = await run(opts({ file: join(dir, 'package.json'), toCatalog: true }));
+          expect(res.changed).toBe(0);
+          expect(h.write).not.toHaveBeenCalled();
+          expect(h.fetch).not.toHaveBeenCalled();
+        },
+      );
+    });
 
-  test.concurrent('errors when the target is not a workspace', async () => {
-    await withTree(
-      { 'package.json': '{ "name": "solo", "dependencies": { "x": "^1.0.0" } }' },
-      async (dir) => {
-        const io = makeIo({});
-        await expect(run(opts({ file: join(dir, 'package.json'), toCatalog: true }), io)).rejects.toThrow(
-          'workspaces',
-        );
-      },
-    );
-  });
-});
-
-// ---------------------------------------------------------------------------
-// main — entry shell (returns an exit code; no process.* mutation)
-// ---------------------------------------------------------------------------
-
-describe('main', () => {
-  test.concurrent('parses argv, runs (dry-run) and returns 0', async () => {
-    await withTree(
-      { 'package.json': '{ "name": "m", "dependencies": { "typescript": "^5.0.0" } }' },
-      async (dir) => {
-        const io = makeIo({ typescript: '9.9.9' });
-        const code = await main([join(dir, 'package.json'), '--dry-run', '--no-recursive'], io);
-        expect(code).toBe(0);
-        expect(io.write).not.toHaveBeenCalled();
-        expect(io.spawn).not.toHaveBeenCalled();
-      },
-    );
-  });
-
-  test.concurrent('returns 1 when the target file is missing', async () => {
-    await withTree({ 'package.json': '{}' }, async (dir) => {
-      const io = makeIo({});
-      const code = await main([join(dir, 'missing', 'package.json')], io);
-      expect(code).toBe(1);
+    test('errors when the target is not a workspace', async () => {
+      await withTree(
+        { 'package.json': '{ "name": "solo", "dependencies": { "x": "^1.0.0" } }' },
+        async (dir) => {
+          await rejectsWith(
+            run(opts({ file: join(dir, 'package.json'), toCatalog: true })),
+            'workspaces',
+          );
+        },
+      );
     });
   });
 
-  test.concurrent('propagates a non-zero install exit code', async () => {
-    await withTree(
-      { 'package.json': '{ "name": "m", "dependencies": { "typescript": "^5.0.0" } }' },
-      async (dir) => {
-        const io = makeIo({ typescript: '9.9.9' }, { installExit: 1 });
-        const code = await main([join(dir, 'package.json')], io);
+  // -------------------------------------------------------------------------
+  // main — entry shell (returns an exit code; no process.* mutation)
+  // -------------------------------------------------------------------------
+
+  describe('main', () => {
+    test('parses argv, runs (dry-run) and returns 0', async () => {
+      await withTree(
+        { 'package.json': '{ "name": "m", "dependencies": { "typescript": "^5.0.0" } }' },
+        async (dir) => {
+          h.fetch.mockImplementation(registryFrom({ typescript: '9.9.9' }));
+          const code = await main([join(dir, 'package.json'), '--dry-run', '--no-recursive']);
+          expect(code).toBe(0);
+          expect(h.write).not.toHaveBeenCalled();
+          expect(h.spawn).not.toHaveBeenCalled();
+        },
+      );
+    });
+
+    test('returns 1 when the target file is missing', async () => {
+      await withTree({ 'package.json': '{}' }, async (dir) => {
+        const code = await main([join(dir, 'missing', 'package.json')]);
         expect(code).toBe(1);
-        expect(io.spawn).toHaveBeenCalledTimes(1);
-      },
-    );
-  });
-});
+        expect(h.error).toHaveBeenCalledWith(expect.stringContaining('Not found:'));
+      });
+    });
 
-// ---------------------------------------------------------------------------
-// Terminal output — captured through the injected real `Console`. The output IS
-// the subject here; we assert the captured stream text (log/info → stdout,
-// warn/error → stderr) from a per-test `new Console`, never by spying the shared
-// global (which would race under --concurrent/--parallel and leak to the real
-// terminal). No assertion touches a global.
-// ---------------------------------------------------------------------------
-
-describe('terminal output (captured via the injected Console)', () => {
-  test.concurrent('runUpdate: header, per-bump ↑ line, and summary go to stdout; stderr stays empty', async () => {
-    await withTree(
-      { 'package.json': '{ "name": "m", "dependencies": { "typescript": "^5.0.0", "eslint": "^8.0.0" } }' },
-      async (dir) => {
-        const io = makeIo({ typescript: '9.9.9', eslint: '9.9.9' });
-        await run(opts({ file: join(dir, 'package.json'), dryRun: true }), io);
-
-        expect(io.stdout()).toContain('Checking 2 package(s) across 1 file(s)…');
-        expect(io.stdout()).toContain('typescript: ^5.0.0 → ^9.9.9');
-        expect(io.stdout()).toContain('eslint: ^8.0.0 → ^9.9.9');
-        expect(io.stdout()).toContain('2 changed · 0 already current · 0 failed');
-        expect(io.stdout()).toContain('(dry-run) no files written');
-        expect(io.stderr()).toBe('');
-      },
-    );
+    test('propagates a non-zero install exit code', async () => {
+      await withTree(
+        { 'package.json': '{ "name": "m", "dependencies": { "typescript": "^5.0.0" } }' },
+        async (dir) => {
+          h.fetch.mockImplementation(registryFrom({ typescript: '9.9.9' }));
+          h.spawn.mockReturnValue(PROC_FAIL);
+          const code = await main([join(dir, 'package.json')]);
+          expect(code).toBe(1);
+          expect(h.spawn).toHaveBeenCalledTimes(1);
+        },
+      );
+    });
   });
 
-  test.concurrent('runUpdate: empty plan prints "No bumpable entries" and fetches nothing', async () => {
-    await withTree(
-      { 'package.json': '{ "name": "m", "dependencies": { "typescript": "latest" } }' },
-      async (dir) => {
-        const io = makeIo({ typescript: '9.9.9' });
-        await run(opts({ file: join(dir, 'package.json'), dryRun: true }), io);
+  // -------------------------------------------------------------------------
+  // Terminal output — the real `console.*` invocations, spied and asserted with
+  // `toHaveBeenCalledWith(stringContaining(...))`. The output IS the subject here.
+  // -------------------------------------------------------------------------
 
-        expect(io.stdout()).toContain(`No bumpable entries in ${join(dir, 'package.json')}`);
-        expect(io.fetchLatest).not.toHaveBeenCalled();
-        expect(io.stdout()).not.toContain('(dry-run)');
-        expect(io.stderr()).toBe('');
-      },
-    );
-  });
+  describe('terminal output', () => {
+    test('runUpdate: header, per-bump line, and summary go to log; nothing to warn/error', async () => {
+      await withTree(
+        { 'package.json': '{ "name": "m", "dependencies": { "typescript": "^5.0.0", "eslint": "^8.0.0" } }' },
+        async (dir) => {
+          h.fetch.mockImplementation(registryFrom({ typescript: '9.9.9', eslint: '9.9.9' }));
+          await run(opts({ file: join(dir, 'package.json'), dryRun: true }));
 
-  test.concurrent('runUpdate: a fetch failure prints ✗ to stderr; others still ↑ to stdout', async () => {
-    await withTree(
-      { 'package.json': '{ "name": "m", "dependencies": { "good": "^1.0.0", "bad": "^1.0.0" } }' },
-      async (dir) => {
-        const io = makeIo({ good: '9.9.9' }, { failOn: new Set(['bad']) });
-        await run(opts({ file: join(dir, 'package.json'), dryRun: true }), io);
+          expect(h.log).toHaveBeenCalledWith(expect.stringContaining('Checking 2 package(s) across 1 file(s)…'));
+          expect(h.log).toHaveBeenCalledWith(expect.stringContaining('typescript: ^5.0.0 → ^9.9.9'));
+          expect(h.log).toHaveBeenCalledWith(expect.stringContaining('eslint: ^8.0.0 → ^9.9.9'));
+          expect(h.log).toHaveBeenCalledWith(expect.stringContaining('2 changed · 0 already current · 0 failed'));
+          expect(h.log).toHaveBeenCalledWith(expect.stringContaining('(dry-run) no files written'));
+          expect(h.warn).not.toHaveBeenCalled();
+          expect(h.error).not.toHaveBeenCalled();
+        },
+      );
+    });
 
-        expect(io.stderr()).toContain('✗');
-        expect(io.stderr()).toContain('bad');
-        expect(io.stdout()).toContain('good: ^1.0.0 → ^9.9.9');
-        expect(io.stdout()).not.toContain('bad:');
-        expect(io.stdout()).toContain('1 changed · 0 already current · 1 failed');
-      },
-    );
-  });
+    test('runUpdate: empty plan prints "No bumpable entries" and fetches nothing', async () => {
+      await withTree(
+        { 'package.json': '{ "name": "m", "dependencies": { "typescript": "latest" } }' },
+        async (dir) => {
+          await run(opts({ file: join(dir, 'package.json'), dryRun: true }));
 
-  test.concurrent('runUpdate: a real write run prints "Running bun install…" to stdout and spawns install', async () => {
-    await withTree(
-      { 'package.json': '{ "name": "m", "dependencies": { "typescript": "^5.0.0" } }' },
-      async (dir) => {
-        const io = makeIo({ typescript: '9.9.9' });
-        await run(opts({ file: join(dir, 'package.json'), install: true }), io);
+          expect(h.log).toHaveBeenCalledWith(expect.stringContaining(`No bumpable entries in ${join(dir, 'package.json')}`));
+          expect(h.fetch).not.toHaveBeenCalled();
+          expect(h.log).not.toHaveBeenCalledWith(expect.stringContaining('(dry-run)'));
+          expect(h.warn).not.toHaveBeenCalled();
+          expect(h.error).not.toHaveBeenCalled();
+        },
+      );
+    });
 
-        expect(io.stdout()).toContain('Running bun install…');
-        expect(io.spawn).toHaveBeenCalledTimes(1);
-        expect(io.write).toHaveBeenCalledTimes(1);
-        expect(io.stdout()).not.toContain('(dry-run)');
-      },
-    );
-  });
+    test('runUpdate: a fetch failure prints ✗ to warn; others still bump to log', async () => {
+      await withTree(
+        { 'package.json': '{ "name": "m", "dependencies": { "good": "^1.0.0", "bad": "^1.0.0" } }' },
+        async (dir) => {
+          h.fetch.mockImplementation(registryFrom({ good: '9.9.9' }, ['bad']));
+          await run(opts({ file: join(dir, 'package.json'), dryRun: true }));
 
-  test.concurrent('runToCatalog: prints "+ catalog ·" rows + summary to stdout, "!" conflicts to stderr', async () => {
-    await withTree(
-      {
-        'package.json': '{ "name": "@cat/root", "workspaces": ["packages/*"] }',
-        'packages/a/package.json': '{ "name": "@cat/a", "dependencies": { "eslint": "^8.0.0" } }',
-        'packages/b/package.json': '{ "name": "@cat/b", "dependencies": { "eslint": "^9.0.0" } }',
-      },
-      async (dir) => {
-        const io = makeIo({ eslint: '9.9.9' });
-        await run(opts({ file: join(dir, 'package.json'), toCatalog: true, dryRun: true }), io);
+          expect(h.warn).toHaveBeenCalledWith(expect.stringContaining('✗'));
+          expect(h.warn).toHaveBeenCalledWith(expect.stringContaining('bad'));
+          expect(h.log).toHaveBeenCalledWith(expect.stringContaining('good: ^1.0.0 → ^9.9.9'));
+          expect(h.log).toHaveBeenCalledWith(expect.stringContaining('1 changed · 0 already current · 1 failed'));
+        },
+      );
+    });
 
-        expect(io.stdout()).toContain('+ catalog · eslint: ^9.9.9');
-        expect(io.stdout()).toContain('1 catalog entries · 2 refs → "catalog:" · 0 failed');
-        expect(io.stdout()).toContain('(dry-run) no files written');
-        expect(io.stderr()).toContain('!');
-        expect(io.stderr()).toContain('eslint');
-      },
-    );
-  });
+    test('runUpdate: a real write run logs "Running bun install…" and installs', async () => {
+      await withTree(
+        { 'package.json': '{ "name": "m", "dependencies": { "typescript": "^5.0.0" } }' },
+        async (dir) => {
+          h.fetch.mockImplementation(registryFrom({ typescript: '9.9.9' }));
+          await run(opts({ file: join(dir, 'package.json'), install: true }));
 
-  test.concurrent('runToCatalog: an already-catalog tree prints "Nothing to convert"', async () => {
-    await withTree(
-      {
-        'package.json':
-          '{ "name": "@cat/root", "workspaces": { "packages": ["packages/*"], "catalog": { "eslint": "^9.9.9" } } }',
-        'packages/a/package.json': '{ "name": "@cat/a", "dependencies": { "eslint": "catalog:" } }',
-      },
-      async (dir) => {
-        const io = makeIo({});
-        await run(opts({ file: join(dir, 'package.json'), toCatalog: true, dryRun: true }), io);
+          expect(h.log).toHaveBeenCalledWith(expect.stringContaining('Running bun install…'));
+          expect(h.spawn).toHaveBeenCalledTimes(1);
+          expect(h.write).toHaveBeenCalledTimes(1);
+          expect(h.log).not.toHaveBeenCalledWith(expect.stringContaining('(dry-run)'));
+        },
+      );
+    });
 
-        expect(io.stdout()).toContain('Nothing to convert (already catalog-based?).');
-        expect(io.write).not.toHaveBeenCalled();
-      },
-    );
-  });
+    test('runToCatalog: logs "+ catalog ·" rows + summary, "!" conflicts to warn', async () => {
+      await withTree(
+        {
+          'package.json': '{ "name": "@cat/root", "workspaces": ["packages/*"] }',
+          'packages/a/package.json': '{ "name": "@cat/a", "dependencies": { "eslint": "^8.0.0" } }',
+          'packages/b/package.json': '{ "name": "@cat/b", "dependencies": { "eslint": "^9.0.0" } }',
+        },
+        async (dir) => {
+          h.fetch.mockImplementation(registryFrom({ eslint: '9.9.9' }));
+          await run(opts({ file: join(dir, 'package.json'), toCatalog: true, dryRun: true }));
 
-  test.concurrent('main: a missing file prints "Not found:" to stderr and returns 1', async () => {
-    await withTree({ 'package.json': '{}' }, async (dir) => {
-      const io = makeIo({});
-      const missing = join(dir, 'missing', 'package.json');
-      const code = await main([missing], io);
+          expect(h.log).toHaveBeenCalledWith(expect.stringContaining('+ catalog · eslint: ^9.9.9'));
+          expect(h.log).toHaveBeenCalledWith(expect.stringContaining('1 catalog entries · 2 refs → "catalog:" · 0 failed'));
+          expect(h.log).toHaveBeenCalledWith(expect.stringContaining('(dry-run) no files written'));
+          expect(h.warn).toHaveBeenCalledWith(expect.stringContaining('!'));
+          expect(h.warn).toHaveBeenCalledWith(expect.stringContaining('eslint'));
+        },
+      );
+    });
 
-      expect(code).toBe(1);
-      expect(io.stderr()).toContain(`Not found: ${missing}`);
-      expect(io.write).not.toHaveBeenCalled();
+    test('runToCatalog: an already-catalog tree logs "Nothing to convert"', async () => {
+      await withTree(
+        {
+          'package.json':
+            '{ "name": "@cat/root", "workspaces": { "packages": ["packages/*"], "catalog": { "eslint": "^9.9.9" } } }',
+          'packages/a/package.json': '{ "name": "@cat/a", "dependencies": { "eslint": "catalog:" } }',
+        },
+        async (dir) => {
+          await run(opts({ file: join(dir, 'package.json'), toCatalog: true, dryRun: true }));
+
+          expect(h.log).toHaveBeenCalledWith(expect.stringContaining('Nothing to convert (already catalog-based?).'));
+          expect(h.write).not.toHaveBeenCalled();
+        },
+      );
+    });
+
+    test('main: a missing file prints "Not found:" to error and returns 1', async () => {
+      await withTree({ 'package.json': '{}' }, async (dir) => {
+        const missing = join(dir, 'missing', 'package.json');
+        const code = await main([missing]);
+
+        expect(code).toBe(1);
+        expect(h.error).toHaveBeenCalledWith(expect.stringContaining(`Not found: ${missing}`));
+        expect(h.write).not.toHaveBeenCalled();
+      });
     });
   });
 });
